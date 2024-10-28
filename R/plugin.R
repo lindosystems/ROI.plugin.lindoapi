@@ -131,7 +131,7 @@ solve_LP <- function(x, control = list()) {
        CHECK_ERR(rEnv, nErr, STOP = TRUE) 
     }
 
-    sol <- lindoapi_solve_model(rModel, control)
+    sol <- lindoapi_solve_model(rEnv, rModel, control)
     # str(sol)
 
     rLSdeleteModel(rModel)
@@ -216,7 +216,7 @@ solve_QP <- function(x, control = list()) {
        CHECK_ERR(rEnv, nErr, STOP = TRUE) 
     }
 
-    sol <- lindoapi_solve_model(rModel, control)
+    sol <- lindoapi_solve_model(rEnv, rModel, control)
     # str(sol)
     
     #rLSwriteMPSFile(rModel, "qp.mps", 0)

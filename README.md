@@ -15,3 +15,19 @@ install.packages("remotes")
 
 # Install ROI.plugin.lindoapi from GitHub
 remotes::install_github("lindosystems/ROI.plugin.lindoapi")
+```
+## Release Notes
+
+1. `ROI.plugin.lindoapi` supports LP, QP models (with continuous and/or integer variables). 
+
+2. Global optimization of non-convex QPs is available via the 'use_gop' option. 
+
+3. `LS_IPARAM_XXX` and `LS_DPARAM_XXX` macros, native to LINDO API, are registered as control keys in the solver database. 
+They can be used to adjust optimization parameters before calling ROI_solve. 
+
+```r
+		control$LS_DPARAM_SOLVER_FEASTOL <- 1e-6
+		control$LS_DPARAM_SOLVER_OPTTOL <- 1e-6
+		control$LS_DPARAM_SOLVER_TIMLMT <- 100
+		...
+```	

@@ -4,7 +4,7 @@ library(rLindo)
 ## @param rModel LINDO API model object
 ## @param time_limit numeric time limit in seconds
 ## @param use_gop logical use global optimization 
-lindoapi_solve_model <- function(rModel, control = list()) {
+lindoapi_solve_model <- function(rEnv, rModel, control = list()) {
     numVars <- rLSgetIInfo(rModel,LS_IINFO_NUM_VARS)[2]$pnResult
     numCont <- rLSgetIInfo(rModel,LS_IINFO_NUM_CONT)[2]$pnResult
     modelType <- rLSgetIInfo(rModel,LS_IINFO_MODEL_TYPE)[2]$pnResult
@@ -12,6 +12,8 @@ lindoapi_solve_model <- function(rModel, control = list()) {
     use_gop <- control$use_gop
     time_limit <- control$time_limit
     method <- control$method
+    verbose <- control$verbose
+
 
     if (is.null(use_gop) || is.na(use_gop)) {
         use_gop <- FALSE
@@ -23,6 +25,28 @@ lindoapi_solve_model <- function(rModel, control = list()) {
 
     if (is.null(method) || is.na(method)) {
         method <- LS_METHOD_FREE
+    }
+
+    if (is.null(verbose) || is.na(verbose)) {
+        verbose <- FALSE
+    }
+
+    for (i in seq_along(control)) {
+        id <- 0
+        if (grepl("LS_DPARAM", names(control)[i])) {
+            id <- rLSgetParamMacroID(rEnv, names(control)[i])$pnParam
+            nErr<-rLSsetModelDouParameter(model=rModel,nParameter=id,dValue=control[[i]])$ErrorCode
+        } else if (grepl("LS_IPARAM", names(control)[i])) {
+            id <- rLSgetParamMacroID(rEnv, names(control)[i])$pnParam
+            nErr<-rLSsetModelIntParameter(model=rModel,nParameter=id,nValue=control[[i]])$ErrorCode
+        }
+        if (verbose == TRUE && id > 0) {
+            if (nErr == 0) {
+                cat(names(control)[i], " set to ", control[[i]], "\n")
+            } else {
+                cat("Error ", nErr, " setting parameter ", names(control)[i], " to ",  control[[i]], "\n")
+            }            
+        }
     }
 
     nfo = list()
@@ -119,7 +143,7 @@ lindoapi_solve_file <- function(file, control = list()) {
 
     r <- lindoapi_read_file(rModel, file)
 
-    sol <- lindoapi_solve_model(rModel, control = control)
+    sol <- lindoapi_solve_model(rEnv, rModel, control = control)
 
     #Delete the model and environment
     rLSdeleteModel(rModel)

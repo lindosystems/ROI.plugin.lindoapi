@@ -47,7 +47,7 @@ make_lindoapi_signatures <- function()
     for (i in seq_along(ls_parkey)) {
         ROI_plugin_register_solver_control(solver, ls_parkey[i], "X")
     }
-    cat((paste("Registered ", length(ls_parkey), " controls for ", solver, "\n")))  
+    cat(sprintf("Registered %d LINDO API parameters as controls for ROI.plugin.%s\n", length(ls_parkey), solver))
     debug = FALSE
     if (debug) {
         for (i in seq_along(ls_parkey)) {

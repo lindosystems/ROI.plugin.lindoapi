@@ -314,9 +314,16 @@ if ( !any(solver %in% names(ROI_registered_solvers())) ) {
 } else {
     print("Start Testing!")
     control <- list()
+    # ROI-like control parameters
     control$time_limit <- 60
     control$use_gop <- TRUE
     control$method <- LS_METHOD_FREE
+    
+    # Native Lindo parameters
+    control$LS_DPARAM_SOLVER_FEASTOL <- 1e-6
+    control$LS_DPARAM_SOLVER_OPTTOL <- 1e-6
+    control$LS_DPARAM_SOLVER_TIMLMT <- 100    
+
     if (2>1) {
         local({test_lp_01(solver, control)})
         local({test_lp_02(solver, control)})
