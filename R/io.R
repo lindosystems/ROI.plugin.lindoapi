@@ -33,6 +33,7 @@ lindoapi_solve_model <- function(rEnv, rModel, control = list()) {
 
     for (i in seq_along(control)) {
         id <- 0
+        nErr <- 0
         if (grepl("LS_DPARAM", names(control)[i])) {
             id <- rLSgetParamMacroID(rEnv, names(control)[i])$pnParam
             nErr<-rLSsetModelDouParameter(model=rModel,nParameter=id,dValue=control[[i]])$ErrorCode
