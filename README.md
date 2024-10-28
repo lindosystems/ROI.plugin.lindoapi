@@ -1,7 +1,7 @@
 # ROI.plugin.lindoapi
 
 ## Installation Requirements
-Before installing `ROI.plugin.lindoapi`, make sure you have the LINDO API and its corresponding R package `rLindo` installed.
+Before installing `ROI.plugin.lindoapi`, make sure you have the [LINDO API](https://lindo.com/index.php/ls-downloads/try-lindo-api) and its corresponding R package `rLindo` installed.
 
 ### Step 1: Install `rLindo`
 To install `rLindo`, refer to the instructions on the [lindoapi-R GitHub page](https://github.com/lindosystems/lindoapi-R). This package provides the R interface for the LINDO API, which is necessary for `ROI.plugin.lindoapi` to work.

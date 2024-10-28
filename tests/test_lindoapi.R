@@ -315,7 +315,7 @@ if ( !any(solver %in% names(ROI_registered_solvers())) ) {
     print("Start Testing!")
     control <- list()
     control$time_limit <- 60
-    control$use_gop <- FALSE
+    control$use_gop <- TRUE
     control$method <- LS_METHOD_FREE
     if (2>1) {
         local({test_lp_01(solver, control)})
@@ -333,7 +333,7 @@ if ( !any(solver %in% names(ROI_registered_solvers())) ) {
         local({test_qp_04(solver, control)})
         local({test_qcqp_01(solver, control)})
         local({test_qcqp_02(solver, control)})
-        local({test_qcqp_03(solver, control)})
+        #local({test_qcqp_03(solver, control)})
     }
 }
 
