@@ -101,7 +101,7 @@ lindoapi_solve_model <- function(rEnv, rModel, control = list()) {
 ### Read a model from a file into a LINDO API model object
 ## @param rModel LINDO API model object just initialized
 ## @param file character file name
-lindoapi_read_file <- function(rModel, file) {
+lindoapi_read_file <- function(rEnv, rModel, file) {
     # Read the model from a file
     r <- rLSreadMPSFile(rModel, file, 0)
     if (r$ErrorCode != LSERR_NO_ERROR) {
@@ -142,7 +142,7 @@ lindoapi_solve_file <- function(file, control = list()) {
     #Create LINDO model object
     rModel <- rLScreateModel(rEnv)
 
-    r <- lindoapi_read_file(rModel, file)
+    r <- lindoapi_read_file(rEnv, rModel, file)
 
     sol <- lindoapi_solve_model(rEnv, rModel, control = control)
 
@@ -292,15 +292,16 @@ lindoapi_to_roi <- function(rModel) {
     OP(objective=obj, constraints=con, types=typ, bounds=bou, maximum = maximum)
 }
 
-## NOTE: lindoapiAPI writes directly to stout therefore we can not capture the error 
-##       messages
+### Read a model from a file into LINDO-API then convert to an ROI model
+## @param fname character file name
+## @remarks **Not tested**
 lindoapi_read_op <- function(fname) {
     #Create LINDO enviroment object
     rEnv <- rLScreateEnv()
     #Create LINDO model object
     rModel <- rLScreateModel(rEnv)
 
-    r <- lindoapi_read_file(rModel, fname)
+    r <- lindoapi_read_file(rEnv, rModel, fname)
 
     roi_op <- lindoapi_to_roi(rModel)
 
