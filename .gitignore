@@ -1,0 +1,7 @@
+
+# Model and solution files
+*.mps
+*.ltx
+*.mpi
+*.sol
+*.ini
