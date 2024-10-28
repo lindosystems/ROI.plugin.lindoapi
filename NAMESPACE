@@ -1,0 +1,12 @@
+
+import("ROI")
+import("rLindo")
+importFrom("slam", "simple_triplet_matrix")
+importFrom("slam", "simple_triplet_zero_matrix")
+importFrom("stats", "terms", "aggregate", "setNames")
+importFrom("methods", "getPackageName")
+importFrom("methods", "getFunction")
+importFrom("Matrix", "sparseMatrix")
+
+export("lindoapi_read_op")
+export("lindoapi_solve_file")

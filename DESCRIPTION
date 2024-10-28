@@ -1,0 +1,9 @@
+Package: ROI.plugin.lindoapi
+Version: 0.1-0
+Title: 'lindoapi' Plugin for the 'R' Optimization Infrastructure 
+Authors@R: person("Mustafa", "Atlihan", role = c("aut", "cre"), email = "atlihan@lindo.com")
+Description: Enhances the 'R' Optimization Infrastructure ('ROI') package
+         with the 'LINDOAPI' solver.
+Imports: methods, slam, ROI (>= 0.2-5), rLindo, Matrix
+License: GPL-3
+URL: https://github.com/lindosystems/ROI.plugin.lindoapi
