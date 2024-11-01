@@ -338,6 +338,7 @@ test_write_mps <- function(solver, control) {
     }
     probfile <- as.character(file.path(probdir, "samples", "data", "roi_test_write.mps"))
     ROI_write(x, probfile, "lindo_io")
+    ROI_solve(x, solver = solver, control)
 }
 
 ### Callback function to act on rEnv and rModel in 'rLindo' style before the optimization starts
@@ -351,7 +352,7 @@ on_before_optimize <- function(rEnv, rModel, control)
     if ( is.null(rEnv) || is.null(rModel) ) return(invisible(NULL))
 
     if (!is.null(control$verbose) && control$verbose) {
-        cat("on_before_optimize acting on rEnv and rModel\n")
+        cat(">>> on_before_optimize acting on rEnv and rModel\n")
     }    
     ###############################
     ## Insert your code here
@@ -362,7 +363,7 @@ on_before_optimize <- function(rEnv, rModel, control)
     numCont <- rLSgetIInfo(rModel,LS_IINFO_NUM_CONT)[2]$pnResult
     modelType <- rLSgetIInfo(rModel,LS_IINFO_MODEL_TYPE)[2]$pnResult
     if (!is.null(control$verbose) && control$verbose) {
-        cat(sprintf(">>> Model has %d variables, %d continuous variables and has a model-id %d\n", numVars, numCont, modelType))
+        cat(sprintf(">>> Model has %d variables, %d continuous variables and has a model-id '%d'\n", numVars, numCont, modelType))
     }
 
     ## e.g. write an MPS file
@@ -375,7 +376,6 @@ on_before_optimize <- function(rEnv, rModel, control)
             cat(">>> Error writing model to file: ", filename, "\n")
         }
     }
-
 
     return(invisible(NULL))
 }
@@ -392,7 +392,7 @@ on_after_optimize <- function(rEnv, rModel, control, result)
     if ( is.null(rEnv) || is.null(rModel) ) return(invisible(NULL))
 
     if (!is.null(control$verbose) && control$verbose) {
-        cat("on_after_optimize acting on rEnv and rModel\n")
+        cat(">>> on_after_optimize acting on rEnv and rModel\n")
     }    
     ###############################
     ## Insert your code here
@@ -425,6 +425,7 @@ if ( !any(solver %in% names(ROI_registered_solvers())) ) {
     control$time_limit <- 60
     control$use_gop <- TRUE
     control$method <- LS_METHOD_FREE
+    control$verbose <- TRUE
     
     # Native Lindo parameters
     control$LS_DPARAM_SOLVER_FEASTOL <- 1e-6
