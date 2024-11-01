@@ -444,6 +444,7 @@ if ( !any(solver %in% names(ROI_registered_solvers())) ) {
         local({test_milp_01(solver, control)})
         local({test_milp_02(solver, control)})
     }
+
     if (0>1) {
         control$method <- LS_METHOD_BARRIER ## switch to barrier method
         control$use_gop <- TRUE ## use global optimization to solve non-convex QPs
@@ -455,9 +456,10 @@ if ( !any(solver %in% names(ROI_registered_solvers())) ) {
         #local({test_qcqp_02(solver, control)})
         local({test_qcqp_03(solver, control)})
     }
+
     if (2>1) {
         ##local({test_read_mps(solver, control)})
         local({test_write_mps(solver, control)})
-    }    
+    }
 }
 
