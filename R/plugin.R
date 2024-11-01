@@ -91,15 +91,11 @@ CHECK_ERR <- function( rEnv, err, STOP=FALSE ) {
     }
 }
 
-### Solve LP
+### Load LP
+## @param rEnv LINDO enviroment object
+## @param rModel LINDO model object
 ## @param x An object of class "OP" representing the optimization problem.
-## @param control A list of control parameters.
-solve_LP <- function(x, control = list()) {
-    #Create LINDO enviroment object
-    rEnv <- rLScreateEnv()
-    #Create LINDO model object
-    rModel <- rLScreateModel(rEnv)
-    
+lindoapi_load_lp <- function(x, rEnv, rModel) {    
     # Number of columns in the constraint matrix.
     nCols <- x$n_of_variables
     # Number of rows in the constraint matrix.
@@ -130,6 +126,19 @@ solve_LP <- function(x, control = list()) {
        nErr = rLSloadVarType(rModel, paste(types(x), collapse = ""))$ErrorCode
        CHECK_ERR(rEnv, nErr, STOP = TRUE) 
     }
+    return nErr
+}
+
+### Solve LP
+## @param x An object of class "OP" representing the optimization problem.
+## @param control A list of control parameters.
+solve_LP <- function(x, control = list()) {
+    #Create LINDO enviroment object
+    rEnv <- rLScreateEnv()
+    #Create LINDO model object
+    rModel <- rLScreateModel(rEnv)
+
+    nErr <- lindoapi_load_lp(x, rEnv, rModel)
 
     sol <- lindoapi_solve_model(rEnv, rModel, control)
     # str(sol)
@@ -143,15 +152,11 @@ solve_LP <- function(x, control = list()) {
         status = sol$status, solver = "lindoapi", message = sol )
 }
 
-### Solve QP
+### Load QP
+## @param rEnv LINDO enviroment object
+## @param rModel LINDO model object
 ## @param x An object of class "OP" representing the optimization problem.
-## @param control A list of control parameters.
-solve_QP <- function(x, control = list()) {
-    #Create LINDO enviroment object
-    rEnv <- rLScreateEnv()
-    #Create LINDO model object
-    rModel <- rLScreateModel(rEnv)
-    
+lindoapi_load_qp(x, rEnv, rModel) {
     # Number of columns in the constraint matrix.
     nCols <- x$n_of_variables
     # Number of rows in the constraint matrix.
@@ -215,6 +220,31 @@ solve_QP <- function(x, control = list()) {
        nErr = rLSloadVarType(rModel, paste(types(x), collapse = ""))$ErrorCode
        CHECK_ERR(rEnv, nErr, STOP = TRUE) 
     }
+    return nErr
+}
+
+### Load LP or QP
+## @param rEnv LINDO enviroment object
+## @param rModel LINDO model object
+## @param x An object of class "OP" representing the optimization problem.
+lindoapi_load(x, rEnv, rModel) {
+    if ( any(OP_signature(x)[1:2] == "Q") ) {
+        lindoapi_load_qp(x, rEnv, rModel)
+    } else {
+        lindoapi_load_lp(x, rEnv, rModel)
+    }
+}
+
+### Solve QP
+## @param x An object of class "OP" representing the optimization problem.
+## @param control A list of control parameters.
+solve_QP <- function(x, control = list()) {
+    #Create LINDO enviroment object
+    rEnv <- rLScreateEnv()
+    #Create LINDO model object
+    rModel <- rLScreateModel(rEnv)
+    
+    nErr <- lindoapi_load_qp(x, rEnv, rModel)
 
     sol <- lindoapi_solve_model(rEnv, rModel, control)
     # str(sol)

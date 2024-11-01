@@ -65,6 +65,14 @@ make_lindoapi_signatures <- function()
     invisible( TRUE )
 }
 
+.add_reader_writer <- function(solver) {
+    ROI_plugin_register_reader("any_format", solver, lindoapi_read_op)
+
+    ROI_plugin_register_writer("any_format", solver, make_lindoapi_signatures(), lindoapi_write_op)
+
+    invisible(NULL)
+}
+
 .onLoad <- function(libname, pkgname) {
     solver <- "lindoapi"
     ## Solver plugin name (based on package name)
@@ -80,6 +88,7 @@ make_lindoapi_signatures <- function()
             method = getFunction("solve_OP", where = getNamespace(pkgname))
         )
         ## Finally, for status code canonicalization add status codes to data base
+        .add_reader_writer(solver)
         .add_status_codes(solver)
         .add_controls(solver)
     } else {

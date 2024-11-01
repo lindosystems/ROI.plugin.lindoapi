@@ -1,18 +1,38 @@
 library(rLindo)
 
-### Solve a LINDO API model object with specified options
-## @param rModel LINDO API model object
+### Solve a LINDO-API model object with specified options
+## @param rModel LINDO-API model object
 ## @param time_limit numeric time limit in seconds
 ## @param use_gop logical use global optimization 
 lindoapi_solve_model <- function(rEnv, rModel, control = list()) {
     numVars <- rLSgetIInfo(rModel,LS_IINFO_NUM_VARS)[2]$pnResult
     numCont <- rLSgetIInfo(rModel,LS_IINFO_NUM_CONT)[2]$pnResult
     modelType <- rLSgetIInfo(rModel,LS_IINFO_MODEL_TYPE)[2]$pnResult
+    
+    # optional callbacks
+    on_after_optimize <- control$on_after_optimize  # After optimization callback
+    on_before_optimize <- control$on_before_optimize # Before optimization callback
 
-    use_gop <- control$use_gop
-    time_limit <- control$time_limit
-    method <- control$method
-    verbose <- control$verbose
+    # LINDO-API native callbacks
+    fn_callback_mip <- control$fn_callback_mip  # MIP callback (every time a new MIP solution is found)
+    fn_callback_std <- control$fn_callback_std  # Standard callback
+    fn_callback_log <- control$fn_callback_log  # Log callback    
+    fn_callback_fox <- control$fn_callback_fox  # F(x), Function (objective and constraints)
+    fn_callback_jox <- control$fn_callback_jox  # J(x), Jacobian
+
+    ## Enable R-callback log
+    #rLSsetModelLogfunc(rModel,fn_callback_log,new.env())
+
+    ## Enable R-callback 
+    #rLSsetCallback(rModel,fn_callback_std,new.env())
+
+    ## Enable R-callback for MIP
+    #rLSsetMIPCallback(rModel,fn_callback_mip,new.env())    
+
+    use_gop <- control$use_gop          # Use global optimization
+    time_limit <- control$time_limit    # Time limit in seconds, overwrites the model's time limit
+    method <- control$method            # Optimization method for continuous models
+    verbose <- control$verbose          # Verbosity on ROI.plugin.lindoapi end
 
 
     if (is.null(use_gop) || is.na(use_gop)) {
@@ -31,6 +51,7 @@ lindoapi_solve_model <- function(rEnv, rModel, control = list()) {
         verbose <- FALSE
     }
 
+    # Set parameters
     for (i in seq_along(control)) {
         id <- 0
         nErr <- 0
@@ -48,6 +69,11 @@ lindoapi_solve_model <- function(rEnv, rModel, control = list()) {
                 cat("Error ", nErr, " setting parameter ", names(control)[i], " to ",  control[[i]], "\n")
             }            
         }
+    }
+
+    # Call the before optimization callback, if defined
+    if (!is.null(on_before_optimize) && is.function(on_before_optimize)) {
+        on_before_optimeze(rEnv, rModel, control)
     }
 
     nfo = list()
@@ -95,11 +121,19 @@ lindoapi_solve_model <- function(rEnv, rModel, control = list()) {
         r$slack = rLSgetMIPSlacks(rModel)$padSlack        
     }
 
-    c(r, info = nfo)
+    result <- c(r, info = nfo)
+
+    # Call the after optimization callback, if defined
+    if (!is.null(on_after_optimize) && is.function(on_after_optimize)) {
+        on_after_optimize(rEnv, rModel, control, result)
+    }
+
+    result
+    
 }
 
-### Read a model from a file into a LINDO API model object
-## @param rModel LINDO API model object just initialized
+### Read a model from a file into a LINDO-API model object
+## @param rModel LINDO-API model object just initialized
 ## @param file character file name
 lindoapi_read_file <- function(rEnv, rModel, file) {
     # Read the model from a file
@@ -131,6 +165,48 @@ lindoapi_read_file <- function(rEnv, rModel, file) {
     return(r)
 }
 
+### Write a model to a file from a LINDO-API model object
+## @param x LINDO-API model object
+## @param rEnv LINDO-API environment object
+## @param rModel LINDO-API model object
+## @param file character file name
+## @param ext optional character, specifying the file format ("mps", "ltx", "mpi", "lp", or "nl").
+lindoapi_write_file <- function(x, rEnv, rModel, file, ext = "") {
+    
+    # Function to detect the file extension after removing compression extensions
+    get_extension <- function(filename) {
+        # Remove compression extensions if present
+        filename <- sub("\\.(gz|zip|7z)$", "", filename)
+        # Extract the extension after the last dot
+        ext <- tolower(tools::file_ext(filename))
+        return(ext)
+    }
+
+    # Determine the extension to use for writing
+    if (ext == "") {
+        ext <- get_extension(file)
+    }
+
+    # Map the extension to the correct LINDO-API function
+    result <- switch(ext,
+        "mps" = rLSwriteMPSFile(rModel, file, LS_UNFORMATTED_MPS),
+        "ltx" = rLSwriteLINDOFile(rModel, file),
+        "mpi" = rLSwriteMPIFile(rModel, file),
+        "lp"  = rLSwriteLPFile(rModel, file),
+        "nl"  = rLSwriteNLFile(rModel, file),
+        stop("Unsupported file extension: ", ext) # If the extension is unsupported
+    )
+
+    # Check for errors
+    if (result$ErrorCode != LSERR_NO_ERROR) {
+        rLSdeleteEnv(rEnv)
+        stop(sprintf("Error %d while writing the file in %s format. Terminating..\n", result$ErrorCode, toupper(ext)))
+    }
+
+    R.utils::printf("Successfully wrote the model to file '%s' in %s format.\n", file, toupper(ext))
+    return(result)
+}
+
 ### Solve a model from a file
 ## @param file character file name
 ## @param time_limit numeric time limit in seconds
@@ -157,8 +233,8 @@ lindoapi_solve_file <- function(file, control = list()) {
         meta = list(solver = solver), class = c(sprintf("%s_solution", solver), "OP_solution"))
 }
 
-### Convert a LINDO API QMATRIX to an ROI Q-constraint
-## @param x LINDO API QMATRIX object
+### Convert a LINDO-API QMATRIX to an ROI Q-constraint
+## @param x LINDO-API QMATRIX object
 ## @param nobj number of variables
 lindoapi_to_Q_constraint <- function(x, nobj) {
     Q <- simple_triplet_matrix(i=x$paiQCcols1+1L, j=x$paiQCcols2+1L, v=x$padQCcoef, nrow=nobj, ncol=nobj)
@@ -167,12 +243,12 @@ lindoapi_to_Q_constraint <- function(x, nobj) {
     Q_constraint(Q=Q, L=L, dir=map_dir(x$sense), rhs=x$rhs)
 }
 
-### Convert a LINDO API matrix to a simple triplet matrix
-## @param A LINDO API object returned by `rLSgetLPData`
+### Convert a LINDO-API matrix to a simple triplet matrix
+## @param A LINDO-API object returned by `rLSgetLPData`
 ## @param nrow number of rows
 ## @param ncol number of columns
 ## @return a simple triplet matrix
-## @remarks This function renames native LINDO API matrix names to those
+## @remarks This function renames native LINDO-API matrix names to those
 ##  used by ROI
 lindoapi_matrix_to_simple_triplet_matrix <- function(A, nrow, ncol) {
     if ( is.null(A) ) return(A)
@@ -205,8 +281,8 @@ map_dir <- function(x) {
     dir_map[x]
 }
 
-### Convert a LINDO API model to an ROI model
-## @param rModel LINDO API model object
+### Convert a LINDO-API model to an ROI model
+## @param rModel LINDO-API model object
 ## @return an ROI model
 lindoapi_to_roi <- function(rModel) {
     problem_name <- "LINDO_MODEL"
@@ -301,8 +377,10 @@ lindoapi_read_op <- function(fname) {
     #Create LINDO model object
     rModel <- rLScreateModel(rEnv)
 
+    # Read the model from a file into LINDO-API
     r <- lindoapi_read_file(rEnv, rModel, fname)
 
+    # Convert the LINDO-API model to an ROI model
     roi_op <- lindoapi_to_roi(rModel)
 
     #Delete the model and environment
@@ -311,4 +389,28 @@ lindoapi_read_op <- function(fname) {
     rLSdeleteEnv(rEnv)
     
     return(roi_op)
+}
+
+### Write an ROI model to a file using LINDO-API
+## @param x ROI model
+## @param file character file name
+## @param ext optional character, specifying the file format ("mps", "ltx", "mpi", "lp", or "nl").
+lindoapi_write_op <- function(x, file, ext = "") {
+    #Create LINDO enviroment object
+    rEnv <- rLScreateEnv()
+    #Create LINDO model object
+    rModel <- rLScreateModel(rEnv)
+
+    # Load the object model x to the LINDO-API
+    lindoapi_load(x, rEnv, rModel)
+
+    # Write the model to a file
+    r <- lindoapi_write_file(x, rEnv, rModel, file, ext = ext)
+
+    #Delete the model and environment
+    rLSdeleteModel(rModel)
+    #Delete the environment
+    rLSdeleteEnv(rEnv)
+    
+    return(r)
 }

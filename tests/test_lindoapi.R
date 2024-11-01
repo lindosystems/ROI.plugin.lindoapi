@@ -273,13 +273,13 @@ test_qcqp_01 <- function(solver, control) {
 ##               x_1 - 3 x_2 +   x_3   <= 30
 ##               1/2 (2 x_1^2 + 2 x_2^2 + 2 x_3^2) <= 1
 test_qcqp_02 <- function(solver, control) {
-    Q0 <- matrix(c(-33, 6, 0, 6, -22, 11.5, 0, 11.5, -11), byrow = TRUE, ncol = 3)
+`    Q0 <- matrix(c(-33, 6, 0, 6, -22, 11.5, 0, 11.5, -11), byrow = TRUE, ncol = 3)
     L0 <- c(1, 2, 3)
     QC <- list(NULL, NULL, diag(2, nrow = 3))
     LC <- matrix(c(-1, 1, 1, 1, -3, 1, 0, 0, 0), byrow = TRUE, ncol = 3)
     x <- OP(Q_objective(Q = Q0, L = L0),
             Q_constraint(Q = QC, L = LC, dir = leq(3), rhs = c(20, 30, 1)),
-            maximum = TRUE)
+            maximum = TRUE)`
     
     opt <- ROI_solve(x, solver = solver, control)#, method = "lpopt")
 
@@ -306,6 +306,114 @@ test_qcqp_03 <- function(solver, control) {
     check("QCQP-02@02", myequal(solution(opt, "objval"), 0.0909090909090907, tol = mytol) )  
 }
 
+## Test reading MPS files
+test_read_mps <- function(solver, control) {
+    probdir <- Sys.getenv("LINDOAPI_HOME")
+    if (nchar(probdir) == 0) {
+        cat("LINDOAPI_HOME is not set. Skipping test_read_mps.\n")
+        return(invisible(NULL))
+    }
+    probfile <- file.path(probdir, "samples", "data", "testqp.mps")
+    x <- ROI_read(probfile)
+    opt <- ROI_solve(x, solver = solver, control)
+
+    probfile <- file.path(probdir, "samples", "data", "testmip.mps")
+    x <- ROI_read(probfile)
+    opt <- ROI_solve(x, solver = solver, control)    
+}
+
+## Test writing MPS files
+test_write_mps <- function(solver, control) {
+    Q0 <- matrix(c(-33, 6, 0, 6, -22, 11.5, 0, 11.5, -11), byrow = TRUE, ncol = 3)
+    L0 <- c(1, 2, 3)
+    QC <- list(NULL, NULL, diag(2, nrow = 3))
+    LC <- matrix(c(-1, 1, 1, 1, -3, 1, 0, 0, 0), byrow = TRUE, ncol = 3)
+    x <- OP(Q_objective(Q = Q0, L = L0),
+            Q_constraint(Q = QC, L = LC, dir = leq(3), rhs = c(20, 30, 1)),
+            maximum = TRUE)    
+    probdir <- Sys.getenv("LINDOAPI_HOME")
+    if (nchar(probdir) == 0) {
+        cat("LINDOAPI_HOME is not set. Skipping test_write_mps.\n")
+        return(invisible(NULL))
+    }
+    probfile <- file.path(probdir, "samples", "data", "roi_test_write.mps")
+    ROI_write(x, probfile)
+}
+
+### Callback function to act on rEnv and rModel in 'rLindo' style before the optimization starts
+## @param rEnv LINDO enviroment object
+## @param rModel LINDO model object
+## @param control A list of control parameters.
+## @remark This function is called right before the optimization starts, this means
+## no other changes are made to the model after this function is called.
+on_before_optimize <- function(rEnv, rModel, control)
+{
+    if ( is.null(rEnv) || is.null(rModel) ) return(invisible(NULL))
+
+    if (control$verbose) {
+        cat("on_before_optimize acting on rEnv and rModel\n")
+    }    
+    ###############################
+    ## Insert your code here
+    ###############################
+    
+    ## e.g. Display model stats
+    numVars <- rLSgetIInfo(rModel,LS_IINFO_NUM_VARS)[2]$pnResult
+    numCont <- rLSgetIInfo(rModel,LS_IINFO_NUM_CONT)[2]$pnResult
+    modelType <- rLSgetIInfo(rModel,LS_IINFO_MODEL_TYPE)[2]$pnResult
+    if (control$verbose) {
+        cat(sprintf(">>> Model has %d variables, %d continuous variables and has a model-id %d\n", numVars, numCont, modelType))
+    }
+
+    ## e.g. write an MPS file
+    filename <- "on_before_test.mps"
+    nErr = rLSwriteMPSFile(rModel, filename, LS_UNFORMATTED_MPS)$ErrorCode
+    CHECK_ERR(rEnv, nErr, STOP=FALSE)
+    if (control$verbose) {    
+        if (nErr==0) {
+            cat(">>> Model written to file: ", filename, "\n")
+        } else {
+            cat(">>> Error writing model to file: ", filename, "\n")
+        }
+    }
+
+
+    return(invisible(NULL))
+}
+
+### Callback function to act on rEnv and rModel in 'rLindo' style after the optimization ends
+## @param rEnv LINDO enviroment object
+## @param rModel LINDO model object
+## @param control A list of control parameters.
+## @param result A list of results.
+### @remark This function is called right after the optimization ends, this means
+## no other changes are made to the model before this function is called.
+on_after_optimize <- function(rEnv, rModel, control, result)
+{
+    if ( is.null(rEnv) || is.null(rModel) ) return(invisible(NULL))
+
+    if (control$verbose) {
+        cat("on_after_optimize acting on rEnv and rModel\n")
+    }    
+    ###############################
+    ## Insert your code here
+    ###############################
+
+    ## e.g. write a solution file
+    solfile <- "on_after_test.sol"
+    nErr = rLSwriteSolution(rModel, solfile, LS_UNFORMATTED_SOLUTION)$ErrorCode
+    CHECK_ERR(rEnv, nErr, STOP=FALSE)
+    if (control$verbose) {
+        if (nErr==0) {
+            cat(">>> Solution written to file: ", solfile, "\n")
+        } else {
+            cat(">>> Error writing solution to file: ", solfile, "\n")
+        }        
+    }
+
+    return(invisible(NULL))
+}
+
 
 solver <- "lindoapi"
 if ( !any(solver %in% names(ROI_registered_solvers())) ) {
@@ -324,14 +432,20 @@ if ( !any(solver %in% names(ROI_registered_solvers())) ) {
     control$LS_DPARAM_SOLVER_OPTTOL <- 1e-6
     control$LS_DPARAM_SOLVER_TIMLMT <- 100    
 
-    if (2>1) {
+    # Callback functions
+    control$on_before_optimize <- on_before_optimize
+    control$on_after_optimize <- on_after_optimize
+    control$fn_callback_std <- cbFunc # from tests/test_cb.R
+    control$fn_callback_log <- logFunc # from tests/test_cb.R
+
+    if (0>1) {
         local({test_lp_01(solver, control)})
         local({test_lp_02(solver, control)})
         local({test_lp_03(solver, control)})
         local({test_milp_01(solver, control)})
         local({test_milp_02(solver, control)})
     }
-    if (2>1) {
+    if (0>1) {
         control$method <- LS_METHOD_BARRIER ## switch to barrier method
         control$use_gop <- TRUE ## use global optimization to solve non-convex QPs
         local({test_qp_01(solver, control)})
@@ -342,7 +456,9 @@ if ( !any(solver %in% names(ROI_registered_solvers())) ) {
         local({test_qcqp_02(solver, control)})
         #local({test_qcqp_03(solver, control)})
     }
+    if (2>1) {
+        local({test_read_mps(solver, control)})
+        local({test_write_mps(solver, control)})
+    }
 }
-
-
 
