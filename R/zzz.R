@@ -16,6 +16,16 @@ make_lindoapi_signatures <- function()
     ROI_plugin_register_solver_control(solver, "time_limit", "X")
     ROI_plugin_register_solver_control(solver, "method", "X")
 
+    # Register callbacks as LINDO API control parameters
+    ROI_plugin_register_solver_control(solver, "on_before_optimize", "X")  # Before optimization callback
+    ROI_plugin_register_solver_control(solver, "on_after_optimize", "X")  # After optimization callback
+    ROI_plugin_register_solver_control(solver, "fn_callback_std", "X") # Standard callback
+    ROI_plugin_register_solver_control(solver, "fn_callback_log", "X") # Log callback    
+    ROI_plugin_register_solver_control(solver, "fn_callback_mip", "X") # MIP callback (every time a new MIP solution is found)
+    ROI_plugin_register_solver_control(solver, "fn_callback_fox", "X") # F(x), Function (objective and constraints)
+    ROI_plugin_register_solver_control(solver, "fn_callback_jox", "X") # J(x), Jacobian
+
+
     # Collect rest of parameters from LINDO enviroment object
     rEnv <- rLScreateEnv()
 
@@ -65,14 +75,17 @@ make_lindoapi_signatures <- function()
     invisible( TRUE )
 }
 
+## Register i/o functions
+## @param solver The name of the solver
 .add_reader_writer <- function(solver) {
-    ROI_plugin_register_reader("any_format", solver, lindoapi_read_op)
+    ROI_plugin_register_reader("lindo_io", solver, lindoapi_read_op)
 
-    ROI_plugin_register_writer("any_format", solver, make_lindoapi_signatures(), lindoapi_write_op)
+    ROI_plugin_register_writer("lindo_io", solver, make_lindoapi_signatures(), lindoapi_write_op)
 
     invisible(NULL)
 }
 
+## Only register the solver if it is not already registered
 .onLoad <- function(libname, pkgname) {
     solver <- "lindoapi"
     ## Solver plugin name (based on package name)

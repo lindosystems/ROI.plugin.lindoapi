@@ -126,7 +126,7 @@ lindoapi_load_lp <- function(x, rEnv, rModel) {
        nErr = rLSloadVarType(rModel, paste(types(x), collapse = ""))$ErrorCode
        CHECK_ERR(rEnv, nErr, STOP = TRUE) 
     }
-    return nErr
+    return (nErr)
 }
 
 ### Solve LP
@@ -156,7 +156,7 @@ solve_LP <- function(x, control = list()) {
 ## @param rEnv LINDO enviroment object
 ## @param rModel LINDO model object
 ## @param x An object of class "OP" representing the optimization problem.
-lindoapi_load_qp(x, rEnv, rModel) {
+lindoapi_load_qp <- function(x, rEnv, rModel) {
     # Number of columns in the constraint matrix.
     nCols <- x$n_of_variables
     # Number of rows in the constraint matrix.
@@ -220,14 +220,14 @@ lindoapi_load_qp(x, rEnv, rModel) {
        nErr = rLSloadVarType(rModel, paste(types(x), collapse = ""))$ErrorCode
        CHECK_ERR(rEnv, nErr, STOP = TRUE) 
     }
-    return nErr
+    return (nErr)
 }
 
 ### Load LP or QP
 ## @param rEnv LINDO enviroment object
 ## @param rModel LINDO model object
 ## @param x An object of class "OP" representing the optimization problem.
-lindoapi_load(x, rEnv, rModel) {
+lindoapi_load <- function(x, rEnv, rModel, control = list()) {
     if ( any(OP_signature(x)[1:2] == "Q") ) {
         lindoapi_load_qp(x, rEnv, rModel)
     } else {

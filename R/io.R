@@ -2,8 +2,7 @@ library(rLindo)
 
 ### Solve a LINDO-API model object with specified options
 ## @param rModel LINDO-API model object
-## @param time_limit numeric time limit in seconds
-## @param use_gop logical use global optimization 
+## @param control A list of control parameters.
 lindoapi_solve_model <- function(rEnv, rModel, control = list()) {
     numVars <- rLSgetIInfo(rModel,LS_IINFO_NUM_VARS)[2]$pnResult
     numCont <- rLSgetIInfo(rModel,LS_IINFO_NUM_CONT)[2]$pnResult
@@ -73,7 +72,7 @@ lindoapi_solve_model <- function(rEnv, rModel, control = list()) {
 
     # Call the before optimization callback, if defined
     if (!is.null(on_before_optimize) && is.function(on_before_optimize)) {
-        on_before_optimeze(rEnv, rModel, control)
+        on_before_optimize(rEnv, rModel, control)
     }
 
     nfo = list()
@@ -135,7 +134,8 @@ lindoapi_solve_model <- function(rEnv, rModel, control = list()) {
 ### Read a model from a file into a LINDO-API model object
 ## @param rModel LINDO-API model object just initialized
 ## @param file character file name
-lindoapi_read_file <- function(rEnv, rModel, file) {
+## @param control A list of control parameters.
+lindoapi_read_file <- function(rEnv, rModel, file, control = list()) {
     # Read the model from a file
     r <- rLSreadMPSFile(rModel, file, 0)
     if (r$ErrorCode != LSERR_NO_ERROR) {
@@ -162,6 +162,9 @@ lindoapi_read_file <- function(rEnv, rModel, file) {
             } # end if
         } # end if
     }
+    if (!is.null(control$verbose) && control$verbose == TRUE) {
+        R.utils::printf("Successfully read the model from file '%s'.\n", file)
+    }
     return(r)
 }
 
@@ -171,7 +174,8 @@ lindoapi_read_file <- function(rEnv, rModel, file) {
 ## @param rModel LINDO-API model object
 ## @param file character file name
 ## @param ext optional character, specifying the file format ("mps", "ltx", "mpi", "lp", or "nl").
-lindoapi_write_file <- function(x, rEnv, rModel, file, ext = "") {
+## @param control A list of control parameters.
+lindoapi_write_file <- function(x, rEnv, rModel, file, ext = "", control = list()) {
     
     # Function to detect the file extension after removing compression extensions
     get_extension <- function(filename) {
@@ -218,7 +222,7 @@ lindoapi_solve_file <- function(file, control = list()) {
     #Create LINDO model object
     rModel <- rLScreateModel(rEnv)
 
-    r <- lindoapi_read_file(rEnv, rModel, file)
+    r <- lindoapi_read_file(rEnv, rModel, file, control)
 
     sol <- lindoapi_solve_model(rEnv, rModel, control = control)
 
@@ -270,6 +274,9 @@ lindoapi_matrix_to_simple_triplet_matrix <- function(A, nrow, ncol) {
     }
     i <- 1L + unlist(lapply(seq_len(ncol), get_column, A=A))
     j <- unlist(mapply(rep.int, seq_along(A$matcnt), A$matcnt, SIMPLIFY=FALSE))
+    print(i)
+    print(j)
+    print(A$matval)
     simple_triplet_matrix(i = i, j = j, v = A$matval, nrow = nrow, ncol = ncol)
 }
 
@@ -284,16 +291,17 @@ map_dir <- function(x) {
 ### Convert a LINDO-API model to an ROI model
 ## @param rModel LINDO-API model object
 ## @return an ROI model
-lindoapi_to_roi <- function(rModel) {
+lindoapi_to_roi <- function(rEnv, rModel, control) {
     problem_name <- "LINDO_MODEL"
 
     nobj <- rLSgetIInfo(rModel,LS_IINFO_NUM_VARS)[2]$pnResult
-    A.nrow  <- rLSgetIInfo(rModel,LS_IINFO_NUM_CONT)[2]$pnResult   
+    ncol <- nobj
+    A.nrow  <- rLSgetIInfo(rModel,LS_IINFO_NUM_CONS)[2]$pnResult   
 
     obj.L <- rLSgetObjective(rModel)$pdObj
     Q0 <- rLSgetQCDatai(rModel,-1L)
-
-    obj.Q <- simple_triplet_matrix(i = Q0$paiQCcols1, j = Q0$paiQCcols2, v = Q0$padQCcoef, nrow = ncol, ncol = ncol)
+        
+    obj.Q <- simple_triplet_matrix(i = Q0$paiQCcols1+1, j = Q0$paiQCcols2+1, v = Q0$padQCcoef, nrow = ncol, ncol = ncol)
     obj.names <- NULL
 
     if ( is.null(obj.Q) ) {
@@ -301,11 +309,13 @@ lindoapi_to_roi <- function(rModel) {
     } else {
         obj <- Q_objective(obj.Q, obj.L, names=obj.names)
     }    
+    print(obj)
 
     dir_map <- setNames(c('<=', '==', '>='), c('L', 'E', 'G'))
     if (A.nrow) {
         m <- rLSgetLPData(rModel)
-        con.L <- lindoapi_matrix_to_simple_triplet_matrix(, A.nrow, nobj)
+        CHECK_ERR(rEnv,m$ErrorCode,STOP=TRUE)
+        con.L <- lindoapi_matrix_to_simple_triplet_matrix(m, A.nrow, nobj)
         con.L.dir <- map_dir(m$pachConTypes)
         con.L.rhs <- m$padB
         con.L.names <- NULL
@@ -371,17 +381,17 @@ lindoapi_to_roi <- function(rModel) {
 ### Read a model from a file into LINDO-API then convert to an ROI model
 ## @param fname character file name
 ## @remarks **Not tested**
-lindoapi_read_op <- function(fname) {
+lindoapi_read_op <- function(fname, control = list()) {
     #Create LINDO enviroment object
     rEnv <- rLScreateEnv()
     #Create LINDO model object
     rModel <- rLScreateModel(rEnv)
 
     # Read the model from a file into LINDO-API
-    r <- lindoapi_read_file(rEnv, rModel, fname)
+    r <- lindoapi_read_file(rEnv, rModel, fname, control)
 
     # Convert the LINDO-API model to an ROI model
-    roi_op <- lindoapi_to_roi(rModel)
+    roi_op <- lindoapi_to_roi(rEnv, rModel, control)
 
     #Delete the model and environment
     rLSdeleteModel(rModel)
@@ -395,17 +405,17 @@ lindoapi_read_op <- function(fname) {
 ## @param x ROI model
 ## @param file character file name
 ## @param ext optional character, specifying the file format ("mps", "ltx", "mpi", "lp", or "nl").
-lindoapi_write_op <- function(x, file, ext = "") {
+lindoapi_write_op <- function(x, file, ext = "", control = list()) {
     #Create LINDO enviroment object
     rEnv <- rLScreateEnv()
     #Create LINDO model object
     rModel <- rLScreateModel(rEnv)
 
     # Load the object model x to the LINDO-API
-    lindoapi_load(x, rEnv, rModel)
+    lindoapi_load(x, rEnv, rModel, control)
 
     # Write the model to a file
-    r <- lindoapi_write_file(x, rEnv, rModel, file, ext = ext)
+    r <- lindoapi_write_file(x, rEnv, rModel, file, ext = ext, control)
 
     #Delete the model and environment
     rLSdeleteModel(rModel)
