@@ -1,5 +1,18 @@
 library(rLindo)
 
+ CHECK_ERR <- function( rEnv, err, STOP=FALSE ) {
+    if ( err != 0 ) {
+        if ( STOP ) {
+            errmsg <- rLSgetErrorMessage(rEnv,err)$pachMessage
+            rLSdeleteEnv(rEnv)
+            cat("Deleting the LINDO API environment\n")
+            stop( paste("Error ", err, ": ", errmsg) )
+        } else {
+            warning( paste("Error ", err, ": ", rLSgetErrorMessage(rEnv,err)$pachMessage) )
+        }
+    }
+}
+
 ### Solve a LINDO-API model object with specified options
 ## @param rModel LINDO-API model object
 ## @param control A list of control parameters.
@@ -255,6 +268,7 @@ lindoapi_to_Q_constraint <- function(x, nobj) {
 ## @remarks This function renames native LINDO-API matrix names to those
 ##  used by ROI
 lindoapi_matrix_to_simple_triplet_matrix <- function(A, nrow, ncol) {
+    
     if ( is.null(A) ) return(A)
     if (any(grepl("qmat", names(A)))) {
         names(A) <- gsub("qmat", "mat", names(A))
@@ -300,24 +314,27 @@ lindoapi_to_roi <- function(rEnv, rModel, control) {
 
     obj.L <- rLSgetObjective(rModel)$pdObj
     Q0 <- rLSgetQCDatai(rModel,-1L)
-        
-    obj.Q <- simple_triplet_matrix(i = Q0$paiQCcols1+1, j = Q0$paiQCcols2+1, v = Q0$padQCcoef, nrow = ncol, ncol = ncol)
+
+    obj.Q <- simple_triplet_matrix(i = Q0$paiQCcols1+1, j = Q0$paiQCcols2+1, v = Q0$padQCcoef, nrow = ncol, ncol = ncol)        
     obj.names <- NULL
 
+        
     if ( is.null(obj.Q) ) {
-        obj <- L_objective(obj.L, names=obj.name)
+        obj <- L_objective(obj.L, names=obj.names)
     } else {
         obj <- Q_objective(obj.Q, obj.L, names=obj.names)
     }    
-    print(obj)
+    
 
     dir_map <- setNames(c('<=', '==', '>='), c('L', 'E', 'G'))
     if (A.nrow) {
-        m <- rLSgetLPData(rModel)
-        CHECK_ERR(rEnv,m$ErrorCode,STOP=TRUE)
-        con.L <- lindoapi_matrix_to_simple_triplet_matrix(m, A.nrow, nobj)
-        con.L.dir <- map_dir(m$pachConTypes)
-        con.L.rhs <- m$padB
+        pModel <- rLSgetLPData(rModel)
+        print(pModel)
+        CHECK_ERR(rEnv,pModel$ErrorCode,STOP=TRUE)
+        cat(sprintf("Model has %d rows and %d columns\n", A.nrow, ncol))
+        con.L <- lindoapi_matrix_to_simple_triplet_matrix(pModel, A.nrow, nobj)
+        con.L.dir <- map_dir(pModel$pachConTypes)
+        con.L.rhs <- pModel$padB
         con.L.names <- NULL
         if (con.L.names) {
             rownames(con.L) <- con.L.names
@@ -325,7 +342,7 @@ lindoapi_to_roi <- function(rEnv, rModel, control) {
         con.L <- L_constraint(con.L, con.L.dir, con.L.rhs)
     } else {
         con.L <- NO_constraint(nobj)
-        m <- NULL
+        pModel <- NULL
     }
     Q0 <- rLSgetQCData(rModel)
     rowidx <- unique(Q0$paiQCrows)
@@ -362,18 +379,18 @@ lindoapi_to_roi <- function(rEnv, rModel, control) {
     if ( is.null(typ) ) {
         typ <- rep("C", nobj)
     }
-    if ( is.null(m) ) {
+    if ( is.null(pModel) ) {
         lb <- NULL
         ub <- NULL
     } else {
-        lb <- m$padL
-        ub <- m$padU
+        lb <- pModel$padL
+        ub <- pModel$padU
     }
 
     bou <- V_bound(li=seq_along(lb), ui=seq_along(ub), lb=lb, ub=ub, nobj=nobj)
 
     ## -1 maximize  and 1 minimize
-    maximum <- c(TRUE, NA, FALSE)[m$pnObjSense + 2L]
+    maximum <- c(TRUE, NA, FALSE)[pModel$pnObjSense + 2L]
 
     OP(objective=obj, constraints=con, types=typ, bounds=bou, maximum = maximum)
 }
@@ -413,7 +430,7 @@ lindoapi_write_op <- function(x, file, ext = "", control = list()) {
 
     # Load the object model x to the LINDO-API
     lindoapi_load(x, rEnv, rModel, control)
-
+    
     # Write the model to a file
     r <- lindoapi_write_file(x, rEnv, rModel, file, ext = ext, control)
 
