@@ -178,6 +178,10 @@ lindoapi_read_file <- function(rEnv, rModel, file, control = list()) {
     if (!is.null(control$verbose) && control$verbose == TRUE) {
         R.utils::printf("Successfully read the model from file '%s'.\n", file)
     }
+    cat("Pausing for 10 seconds...\n")
+    #Sys.sleep(20)
+    cat("Resuming execution.\n")
+
     return(r)
 }
 
@@ -268,7 +272,6 @@ lindoapi_to_Q_constraint <- function(x, nobj) {
 ## @remarks This function renames native LINDO-API matrix names to those
 ##  used by ROI
 lindoapi_matrix_to_simple_triplet_matrix <- function(A, nrow, ncol) {
-    
     if ( is.null(A) ) return(A)
     if (any(grepl("qmat", names(A)))) {
         names(A) <- gsub("qmat", "mat", names(A))
@@ -288,9 +291,6 @@ lindoapi_matrix_to_simple_triplet_matrix <- function(A, nrow, ncol) {
     }
     i <- 1L + unlist(lapply(seq_len(ncol), get_column, A=A))
     j <- unlist(mapply(rep.int, seq_along(A$matcnt), A$matcnt, SIMPLIFY=FALSE))
-    print(i)
-    print(j)
-    print(A$matval)
     simple_triplet_matrix(i = i, j = j, v = A$matval, nrow = nrow, ncol = ncol)
 }
 
@@ -308,14 +308,24 @@ map_dir <- function(x) {
 lindoapi_to_roi <- function(rEnv, rModel, control) {
     problem_name <- "LINDO_MODEL"
 
+	pModel <- rLSgetLPData(rModel)
+	if (pModel$ErrorCode != 0) {
+        CHECK_ERR(rEnv,pModel$ErrorCode,STOP=TRUE)
+    }
+	
     nobj <- rLSgetIInfo(rModel,LS_IINFO_NUM_VARS)[2]$pnResult
     ncol <- nobj
     A.nrow  <- rLSgetIInfo(rModel,LS_IINFO_NUM_CONS)[2]$pnResult   
 
-    obj.L <- rLSgetObjective(rModel)$pdObj
+    obj.L <- pModel$padC
     Q0 <- rLSgetQCDatai(rModel,-1L)
-
-    obj.Q <- simple_triplet_matrix(i = Q0$paiQCcols1+1, j = Q0$paiQCcols2+1, v = Q0$padQCcoef, nrow = ncol, ncol = ncol)        
+    
+    obj.Q <- NULL
+    if (!is.null(Q0$paiQCcols1) && !is.null(Q0$paiQCcols2) && !is.null(Q0$padQCcoef)) {
+        obj.Q <- simple_triplet_matrix(i = Q0$paiQCcols1 + 1, j = Q0$paiQCcols2 + 1, v = Q0$padQCcoef, nrow = ncol, ncol = ncol)
+    } else {
+        obj.Q <- simple_triplet_zero_matrix(nrow = ncol, ncol = ncol)
+    }
     obj.names <- NULL
 
         
@@ -323,62 +333,63 @@ lindoapi_to_roi <- function(rEnv, rModel, control) {
         obj <- L_objective(obj.L, names=obj.names)
     } else {
         obj <- Q_objective(obj.Q, obj.L, names=obj.names)
-    }    
-    
+    } 
 
-    dir_map <- setNames(c('<=', '==', '>='), c('L', 'E', 'G'))
-    if (A.nrow) {
-        pModel <- rLSgetLPData(rModel)
-        print(pModel)
-        CHECK_ERR(rEnv,pModel$ErrorCode,STOP=TRUE)
-        cat(sprintf("Model has %d rows and %d columns\n", A.nrow, ncol))
-        con.L <- lindoapi_matrix_to_simple_triplet_matrix(pModel, A.nrow, nobj)
-        con.L.dir <- map_dir(pModel$pachConTypes)
-        con.L.rhs <- pModel$padB
-        con.L.names <- NULL
-        if (con.L.names) {
-            rownames(con.L) <- con.L.names
-        }
-        con.L <- L_constraint(con.L, con.L.dir, con.L.rhs)
-    } else {
-        con.L <- NO_constraint(nobj)
-        pModel <- NULL
-    }
-    Q0 <- rLSgetQCData(rModel)
-    rowidx <- unique(Q0$paiQCrows)
-    nqconstrs <- rLSgetIInfo(rModel, LS_IINFO_NUM_QCP_CONS)[2]$pnResult
+	dir_map <- setNames(c('<=', '==', '>='), c('L', 'E', 'G'))
+	csense <- unlist(strsplit(pModel$pachConTypes, split = ""))
+
+	nqconstrs <- rLSgetIInfo(rModel, LS_IINFO_NUM_QCP_CONS)[2]$pnResult
     if ( is.null(obj.Q) ) {
         nqconstrs <- nqconstrs - 1
     }
-    if ( nqconstrs ) {
-        con.Q <- vector("list", nqconstrs)
+	
+    Q0 <- rLSgetQCData(rModel)    		
+    qrowidx <- unique(Q0$paiQCrows)	    
+	
+	if ( nqconstrs==0 ) {
+        con.Q <- NO_constraint(nobj) 
+		if (A.nrow) {   
+			con.L <- lindoapi_matrix_to_simple_triplet_matrix(pModel, A.nrow, nobj)			
+			con.L.dir <- map_dir(csense)
+			con.L.rhs <- pModel$padB
+			con.L.names <- NULL		
+			if (!is.null(con.L.names)) {
+				rownames(con.L) <- con.L.names
+			}		
+			con.L <- L_constraint(con.L, con.L.dir, con.L.rhs)
+		} else {
+			con.L <- NO_constraint(nobj)
+			pModel <- NULL
+		}		       
+	} else {
+        stop("Not implemented")
+        con.Q <- vector("list", A.nrow)
+        con.L <- vector("list", A.nrow)
         for (k in seq_along(con.Q)) {
-            i = rowidx[k]
-            if (i>0) {
-                Q_i <- rLSgetQCDatai(rModel,i)
+            r <- rLSgetLPConstraintDatai(rModel,k-1)
+            Q_i <- rLSgetQCDatai(rModel,k-1)
+            if ( Q_i$pnQCnnz > 0 ) {
+                Q_i$sense <- csense[k]
+                Q_i$rhs <- pModel$padB[k]
+                Q_i$linind <- r$paiVar
+                Q_i$linval <- r$padAcoef
                 con.Q[[k]] <- lindoapi_to_Q_constraint(Q_i, nobj)
-            }
-        }
+            } else {  
+                L_i <- simple_triplet_matrix(i=rep(1L, length(r$paiVar)), j=r$paiVar + 1L, v=r$padAcoef, nrow=1, ncol=nobj)
+                con.L[[k]] <- L_constraint(L_i, dir=map_dir(csense[k]), rhs=pModel$padB[k])
+            }   			
+        }        
         con.Q <- do.call(c, con.Q)
-    } else {
-        con.Q <- NO_constraint(nobj)
-    }
-
-    ## FIXME
-    if ( is.NO_constraint(con.L) & is.NO_constraint(con.Q) ) {
-        con <- NULL
-    } else if ( is.NO_constraint(con.L) ) {
-        con <- con.Q
-    } else if ( is.NO_constraint(con.Q) ) {
-        con <- con.L
-    } else {
-        con <- c(con.L, con.Q)
-    }
+        con.L <- do.call(c, con.L)
+    } 
+    con <- c(con.L, con.Q)
 
     typ <-  rLSgetVarType(rModel)$pachVarTypes
     if ( is.null(typ) ) {
         typ <- rep("C", nobj)
-    }
+    } else {
+		typ <- unlist(strsplit(typ, split = ""))
+	}
     if ( is.null(pModel) ) {
         lb <- NULL
         ub <- NULL
