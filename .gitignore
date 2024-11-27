@@ -6,5 +6,6 @@
 *.sol
 *.ini
 
+tests/test_roi_from_mps.R
 a
 b

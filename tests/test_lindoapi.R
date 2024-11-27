@@ -367,13 +367,48 @@ on_before_optimize <- function(rEnv, rModel, control)
     }
 
     ## e.g. write an MPS file
-    filename <- "on_before_test.mps"
-    nErr = rLSwriteMPSFile(rModel, filename, LS_UNFORMATTED_MPS)$ErrorCode    
-    if (!is.null(control$verbose) && control$verbose) {    
-        if (nErr==0) {
-            cat(">>> Model written to file: ", filename, "\n")
-        } else {
-            cat(">>> Error writing model to file: ", filename, "\n")
+    if (0>1) {
+        filename <- "on_before_test.mps"
+        nErr = rLSwriteMPSFile(rModel, filename, LS_UNFORMATTED_MPS)$ErrorCode    
+        if (!is.null(control$verbose) && control$verbose) {    
+            if (nErr==0) {
+                cat(">>> Model written to file: ", filename, "\n")
+            } else {
+                cat(">>> Error writing model to file: ", filename, "\n")
+            }
+        }
+    }
+
+    ## e.g. display the parameters which are set to non-default values right before the optimization starts
+    if (2>1) {
+        cat("\n>>> Displaying non-default parameters\n")
+        cnt <- ROI_registered_solver_control(solver)
+        for (i in 1:nrow(cnt)) {
+            par_key <- as.character(cnt$control[i])
+            r <- rLSgetParamMacroID(rEnv, par_key)
+            if (r$ErrorCode != 0 && grepl("LS_", par_key)) {
+                cat(sprintf(">>> Error getting parameter id for %s\n", par_key))
+                next
+            } else {
+                par_id = r$pnParam
+                if (grepl("LS_IPARAM", par_key)) {
+                    par_e <- rLSgetEnvIntParameter(rEnv, par_id)
+                    par_m <- rLSgetModelIntParameter(rModel, par_id)
+                    if (!is.null(par_e$pnValue) && !is.na(par_e$pnValue) && 
+                        !is.null(par_m$pnValue) && !is.na(par_m$pnValue) && 
+                        par_m$pnValue != par_e$pnValue) {
+                        cat(sprintf(">>> %s = %d (default = %d)\n", par_key, par_m$pnValue, par_e$pnValue))
+                    }
+                } else if (grepl("LS_DPARAM", par_key)) {
+                    par_e <- rLSgetEnvDouParameter(rEnv, par_id)
+                    par_m <- rLSgetModelDouParameter(rModel, par_id)
+                    if (!is.null(par_e$pdValue) && !is.na(par_e$pdValue) && 
+                        !is.null(par_m$pdValue) && !is.na(par_m$pdValue) && 
+                        par_m$pdValue != par_e$pdValue) {
+                        cat(sprintf(">>> %s = %g (default = %g)\n", par_key, par_m$pdValue, par_e$pdValue))
+                    }
+                }
+            }
         }
     }
 
@@ -438,29 +473,79 @@ if ( !any(solver %in% names(ROI_registered_solvers())) ) {
     control$fn_callback_std <- cbFunc # from tests/test_cb.R
     control$fn_callback_log <- logFunc # from tests/test_cb.R
 
-    if (0>1) {
-        local({test_lp_01(solver, control)})
-        local({test_lp_02(solver, control)})
-        local({test_lp_03(solver, control)})
-        local({test_milp_01(solver, control)})
-        local({test_milp_02(solver, control)})
+    # Retrieve command-line arguments
+    args <- commandArgs(trailingOnly = TRUE)
+
+    # Print the arguments to debug
+    cat("Command-line arguments:", args, "\n")
+
+    # Check if the file path argument is provided
+    if (length(args) == 0) {
+        message("No test specified, running all.")
+        if (0>1) {
+            local({test_lp_01(solver, control)})
+            local({test_lp_02(solver, control)})
+            local({test_lp_03(solver, control)})
+            local({test_milp_01(solver, control)})
+            local({test_milp_02(solver, control)})
+        }
+
+        if (2>1) {
+            control$method <- LS_METHOD_BARRIER ## switch to barrier method
+            control$use_gop <- TRUE ## use global optimization to solve non-convex QPs
+            local({test_qp_01(solver, control)})
+            local({test_qp_02(solver, control)})
+            local({test_qp_03(solver, control)})
+            local({test_qp_04(solver, control)})
+            local({test_qcqp_01(solver, control)})
+            #local({test_qcqp_02(solver, control)})
+            local({test_qcqp_03(solver, control)})
+        }
+
+        if (2>1) {
+            ##local({test_read_mps(solver, control)})
+            local({test_write_mps(solver, control)})
+        }
+    } else {
+        # Use the first argument as the file path
+        test_name <- args[1]
+        cat("Test name provided:", test_name, "\n")
+        if (grepl("qp", test_name)) {
+            control$method <- LS_METHOD_BARRIER ## switch to barrier method
+            control$use_gop <- TRUE ## use global optimization to solve non-convex QPs
+        }        
+        if (test_name == "test_lp_01") {
+            local({test_lp_01(solver, control)})
+        } else if (test_name == "test_lp_02") {
+            local({test_lp_02(solver, control)})
+        } else if (test_name == "test_lp_03") {
+            local({test_lp_03(solver, control)})
+        } else if (test_name == "test_milp_01") {
+            local({test_milp_01(solver, control)})
+        } else if (test_name == "test_milp_02") {
+            local({test_milp_02(solver, control)})
+        } else if (test_name == "test_qp_01") {
+            local({test_qp_01(solver, control)})
+        } else if (test_name == "test_qp_02") {
+            local({test_qp_02(solver, control)})
+        } else if (test_name == "test_qp_03") {
+            local({test_qp_03(solver, control)})
+        } else if (test_name == "test_qp_04") {
+            local({test_qp_04(solver, control)})
+        } else if (test_name == "test_qcqp_01") {
+            local({test_qcqp_01(solver, control)})
+        } else if (test_name == "test_qcqp_02") {
+            local({test_qcqp_02(solver, control)})
+        } else if (test_name == "test_qcqp_03") {
+            local({test_qcqp_03(solver, control)})
+        } else if (test_name == "test_read_mps") {
+            local({test_read_mps(solver, control)})
+        } else if (test_name == "test_write_mps") {
+            local({test_write_mps(solver, control)})
+        } else {
+            message("Specified test not found..")
+        }
     }
 
-    if (0>1) {
-        control$method <- LS_METHOD_BARRIER ## switch to barrier method
-        control$use_gop <- TRUE ## use global optimization to solve non-convex QPs
-        local({test_qp_01(solver, control)})
-        local({test_qp_02(solver, control)})
-        local({test_qp_03(solver, control)})
-        local({test_qp_04(solver, control)})
-        local({test_qcqp_01(solver, control)})
-        #local({test_qcqp_02(solver, control)})
-        local({test_qcqp_03(solver, control)})
-    }
-
-    if (2>1) {
-        ##local({test_read_mps(solver, control)})
-        local({test_write_mps(solver, control)})
-    }
 }
 

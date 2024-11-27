@@ -78,19 +78,6 @@ map_sense <- function(x) {
     sense_map[constraints(x)$dir]
 }
 
-CHECK_ERR <- function( rEnv, err, STOP=FALSE ) {
-    if ( err != 0 ) {
-        if ( STOP ) {
-            errmsg <- rLSgetErrorMessage(rEnv,err)$pachMessage
-            rLSdeleteEnv(rEnv)
-            cat("Deleting the LINDO API environment\n")
-            stop( paste("Error ", err, ": ", errmsg) )
-        } else {
-            warning( paste("Error ", err, ": ", rLSgetErrorMessage(rEnv,err)$pachMessage) )
-        }
-    }
-}
-
 ### Load LP
 ## @param rEnv LINDO enviroment object
 ## @param rModel LINDO model object
