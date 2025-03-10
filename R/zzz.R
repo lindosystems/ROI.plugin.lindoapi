@@ -87,20 +87,24 @@ make_lindoapi_signatures <- function()
 }
 
 ## Only register the solver if it is not already registered
-.onLoad <- function(libname, pkgname) {
+register_solver <- function(libname, pkgname) {
     solver <- "lindoapi"
     ## Solver plugin name (based on package name)
     registered_solvers <- ROI_registered_solvers()
 
     ## Only register if the solver is not already registered
     if (!solver %in% registered_solvers) {
+        message("Registering solver '", solver, "'")
+        
         ## Register solver methods here.
-        ## One can assign several signatures a single solver method
+        method <- if (LSLOCAL) solve_OP else getFunction("solve_OP", where = getNamespace(pkgname))
+
         ROI_plugin_register_solver_method(
             signatures = make_lindoapi_signatures(),
             solver = solver,
-            method = getFunction("solve_OP", where = getNamespace(pkgname))
+            method = method  # Use the locally defined solve_OP
         )
+
         ## Finally, for status code canonicalization add status codes to data base
         .add_reader_writer(solver)
         .add_status_codes(solver)
@@ -108,4 +112,12 @@ make_lindoapi_signatures <- function()
     } else {
         message("Solver '", solver, "' is already registered. Skipping registration.")
     }
+}
+
+
+## Only register the solver if it is not already registered
+.onLoad <- function(libname, pkgname) {
+    message("Loading package ", pkgname)
+    register_solver(libname, pkgname)    
+    invisible(NULL)
 }

@@ -1,5 +1,5 @@
 Package: ROI.plugin.lindoapi
-Version: 0.2-1
+Version: 0.3-1
 Title: 'lindoapi' Plugin for the 'R' Optimization Infrastructure 
 Authors@R: person("Mustafa", "Atlihan", role = c("aut", "cre"), email = "atlihan@lindo.com")
 Description: Enhances the 'R' Optimization Infrastructure ('ROI') package

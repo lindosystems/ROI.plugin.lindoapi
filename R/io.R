@@ -1,4 +1,5 @@
 library(rLindo)
+library(slam)
 
  CHECK_ERR <- function( rEnv, err, STOP=FALSE ) {
     if ( err != 0 ) {
@@ -272,7 +273,9 @@ lindoapi_to_Q_constraint <- function(x, nobj) {
 ## @remarks This function renames native LINDO-API matrix names to those
 ##  used by ROI
 lindoapi_matrix_to_simple_triplet_matrix <- function(A, nrow, ncol) {
-    if ( is.null(A) ) return(A)
+    if (is.null(A)) return(A)
+
+    # Rename fields if necessary
     if (any(grepl("qmat", names(A)))) {
         names(A) <- gsub("qmat", "mat", names(A))
     }
@@ -285,12 +288,33 @@ lindoapi_matrix_to_simple_triplet_matrix <- function(A, nrow, ncol) {
     if (any(grepl("padAcoef", names(A)))) {
         names(A) <- gsub("padAcoef", "matval", names(A))
     }
-    A$matcnt <- diff(c(A$matbeg, length(A$matind)))
-    get_column <- function(j, A) {  
-        A$matind[seq(from=A$matbeg[j]+1L, length.out=A$matcnt[j])]
+
+    # Validate A$matbeg and A$matind
+    if (is.null(A$matbeg) || is.null(A$matind)) {
+        stop("A$matbeg or A$matind is NULL. Check the input data.")
     }
-    i <- 1L + unlist(lapply(seq_len(ncol), get_column, A=A))
-    j <- unlist(mapply(rep.int, seq_along(A$matcnt), A$matcnt, SIMPLIFY=FALSE))
+
+    # Calculate A$matcnt
+    A$matcnt <- diff(c(A$matbeg, length(A$matind)))
+
+    # Validate A$matcnt
+    if (any(A$matcnt < 0)) {
+        stop("A$matcnt contains negative values. Check A$matbeg and A$matind.")
+    }
+
+    # Define the get_column function
+    get_column <- function(j, A) {
+        if (A$matcnt[j] <= 0) {
+            return(integer(0))  # Return empty vector for invalid columns
+        }
+        A$matind[seq(from = A$matbeg[j] + 1L, length.out = A$matcnt[j])]
+    }
+
+    # Generate row and column indices
+    i <- 1L + unlist(lapply(seq_len(ncol), get_column, A = A))
+    j <- unlist(mapply(rep.int, seq_along(A$matcnt), A$matcnt, SIMPLIFY = FALSE))
+
+    # Create and return the simple_triplet_matrix
     simple_triplet_matrix(i = i, j = j, v = A$matval, nrow = nrow, ncol = ncol)
 }
 
@@ -309,6 +333,7 @@ lindoapi_to_roi <- function(rEnv, rModel, control) {
     problem_name <- "LINDO_MODEL"
 
 	pModel <- rLSgetLPData(rModel)
+    #print(pModel)
 	if (pModel$ErrorCode != 0) {
         CHECK_ERR(rEnv,pModel$ErrorCode,STOP=TRUE)
     }
@@ -321,7 +346,7 @@ lindoapi_to_roi <- function(rEnv, rModel, control) {
     Q0 <- rLSgetQCDatai(rModel,-1L)
     
     obj.Q <- NULL
-    if (!is.null(Q0$paiQCcols1) && !is.null(Q0$paiQCcols2) && !is.null(Q0$padQCcoef)) {
+    if (!is.null(Q0$paiQCcols1) && !is.null(Q0$paiQCcols2) && !is.null(Q0$padQCcoef) && Q0$pnQCnnz > 0) {
         obj.Q <- simple_triplet_matrix(i = Q0$paiQCcols1 + 1, j = Q0$paiQCcols2 + 1, v = Q0$padQCcoef, nrow = ncol, ncol = ncol)
     } else {
         obj.Q <- simple_triplet_zero_matrix(nrow = ncol, ncol = ncol)
@@ -361,12 +386,13 @@ lindoapi_to_roi <- function(rEnv, rModel, control) {
 			con.L <- NO_constraint(nobj)
 			pModel <- NULL
 		}		       
-	} else {
-        stop("Not implemented")
+	} else {        
         con.Q <- vector("list", A.nrow)
         con.L <- vector("list", A.nrow)
         for (k in seq_along(con.Q)) {
             r <- rLSgetLPConstraintDatai(rModel,k-1)
+            L_i <- simple_triplet_matrix(i=rep(1L, length(r$paiVar)), j=r$paiVar + 1L, v=r$padAcoef, nrow=1, ncol=nobj)
+            con.L[[k]] <- L_constraint(L_i, dir=map_dir(csense[k]), rhs=pModel$padB[k])            
             Q_i <- rLSgetQCDatai(rModel,k-1)
             if ( Q_i$pnQCnnz > 0 ) {
                 Q_i$sense <- csense[k]
@@ -374,9 +400,6 @@ lindoapi_to_roi <- function(rEnv, rModel, control) {
                 Q_i$linind <- r$paiVar
                 Q_i$linval <- r$padAcoef
                 con.Q[[k]] <- lindoapi_to_Q_constraint(Q_i, nobj)
-            } else {  
-                L_i <- simple_triplet_matrix(i=rep(1L, length(r$paiVar)), j=r$paiVar + 1L, v=r$padAcoef, nrow=1, ncol=nobj)
-                con.L[[k]] <- L_constraint(L_i, dir=map_dir(csense[k]), rhs=pModel$padB[k])
             }   			
         }        
         con.Q <- do.call(c, con.Q)
@@ -404,6 +427,113 @@ lindoapi_to_roi <- function(rEnv, rModel, control) {
     maximum <- c(TRUE, NA, FALSE)[pModel$pnObjSense + 2L]
 
     OP(objective=obj, constraints=con, types=typ, bounds=bou, maximum = maximum)
+}
+
+lindoapi_to_roi_dups <- function(rEnv, rModel, control) {
+    problem_name <- "LINDO_MODEL"
+
+    pModel <- rLSgetLPData(rModel)
+    if (pModel$ErrorCode != 0) {
+        CHECK_ERR(rEnv, pModel$ErrorCode, STOP = TRUE)
+    }
+
+    nobj <- rLSgetIInfo(rModel, LS_IINFO_NUM_VARS)[2]$pnResult
+    ncol <- nobj
+    A.nrow <- rLSgetIInfo(rModel, LS_IINFO_NUM_CONS)[2]$pnResult
+
+    obj.L <- pModel$padC
+    Q0 <- rLSgetQCDatai(rModel, -1L)
+    print(Q0)
+    obj.Q <- NULL
+    if (!is.null(Q0$paiQCcols1) && !is.null(Q0$paiQCcols2) && !is.null(Q0$padQCcoef) && Q0$pnQCnnz > 0) {
+        # Combine i, j, and v into a data frame
+        df <- data.frame(i = Q0$paiQCcols1 + 1, j = Q0$paiQCcols2 + 1, v = Q0$padQCcoef)
+
+        # Aggregate duplicate (i, j) pairs by summing their values
+        df_agg <- aggregate(v ~ i + j, data = df, FUN = sum)
+
+        # Create the simple_triplet_matrix using the aggregated data
+        obj.Q <- simple_triplet_matrix(i = df_agg$i, j = df_agg$j, v = df_agg$v, nrow = ncol, ncol = ncol)
+    } else {
+        obj.Q <- simple_triplet_zero_matrix(nrow = ncol, ncol = ncol)
+    }
+    obj.names <- NULL
+
+    if (is.null(obj.Q)) {
+        obj <- L_objective(obj.L, names = obj.names)
+    } else {
+        obj <- Q_objective(obj.Q, obj.L, names = obj.names)
+    }
+
+    dir_map <- setNames(c('<=', '==', '>='), c('L', 'E', 'G'))
+    csense <- unlist(strsplit(pModel$pachConTypes, split = ""))
+
+    nqconstrs <- rLSgetIInfo(rModel, LS_IINFO_NUM_QCP_CONS)[2]$pnResult
+    if (is.null(obj.Q)) {
+        nqconstrs <- nqconstrs - 1
+    }
+
+    Q0 <- rLSgetQCData(rModel)
+    qrowidx <- unique(Q0$paiQCrows)
+
+    if (nqconstrs == 0) {
+        con.Q <- NO_constraint(nobj)
+        if (A.nrow) {
+            con.L <- lindoapi_matrix_to_simple_triplet_matrix(pModel, A.nrow, nobj)
+            con.L.dir <- map_dir(csense)
+            con.L.rhs <- pModel$padB
+            con.L.names <- NULL
+            if (!is.null(con.L.names)) {
+                rownames(con.L) <- con.L.names
+            }
+            con.L <- L_constraint(con.L, con.L.dir, con.L.rhs)
+        } else {
+            con.L <- NO_constraint(nobj)
+            pModel <- NULL
+        }
+    } else {
+        stop("Not implemented")
+        con.Q <- vector("list", A.nrow)
+        con.L <- vector("list", A.nrow)
+        for (k in seq_along(con.Q)) {
+            r <- rLSgetLPConstraintDatai(rModel, k - 1)
+            Q_i <- rLSgetQCDatai(rModel, k - 1)
+            if (Q_i$pnQCnnz > 0) {
+                Q_i$sense <- csense[k]
+                Q_i$rhs <- pModel$padB[k]
+                Q_i$linind <- r$paiVar
+                Q_i$linval <- r$padAcoef
+                con.Q[[k]] <- lindoapi_to_Q_constraint(Q_i, nobj)
+            } else {
+                L_i <- simple_triplet_matrix(i = rep(1L, length(r$paiVar)), j = r$paiVar + 1L, v = r$padAcoef, nrow = 1, ncol = nobj)
+                con.L[[k]] <- L_constraint(L_i, dir = map_dir(csense[k]), rhs = pModel$padB[k])
+            }
+        }
+        con.Q <- do.call(c, con.Q)
+        con.L <- do.call(c, con.L)
+    }
+    con <- c(con.L, con.Q)
+
+    typ <- rLSgetVarType(rModel)$pachVarTypes
+    if (is.null(typ)) {
+        typ <- rep("C", nobj)
+    } else {
+        typ <- unlist(strsplit(typ, split = ""))
+    }
+    if (is.null(pModel)) {
+        lb <- NULL
+        ub <- NULL
+    } else {
+        lb <- pModel$padL
+        ub <- pModel$padU
+    }
+
+    bou <- V_bound(li = seq_along(lb), ui = seq_along(ub), lb = lb, ub = ub, nobj = nobj)
+
+    ## -1 maximize  and 1 minimize
+    maximum <- c(TRUE, NA, FALSE)[pModel$pnObjSense + 2L]
+
+    OP(objective = obj, constraints = con, types = typ, bounds = bou, maximum = maximum)
 }
 
 ### Read a model from a file into LINDO-API then convert to an ROI model

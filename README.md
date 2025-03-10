@@ -10,7 +10,7 @@ To install `rLindo`, refer to the instructions on the [lindoapi-R GitHub page](h
 Once `rLindo` is installed, you can install `ROI.plugin.lindoapi` directly from GitHub. Run the following command from within R:
 
 ```r
-# Install the remotes package if you haven’t already
+# Install the remotes package if you havenï¿½t already
 install.packages("remotes")
 
 # Install ROI.plugin.lindoapi from GitHub

@@ -1,9 +1,20 @@
 ### Test script for the ROI.plugin.lindoapi package
 
+## LSLOCAL is a flag to indicate if the package is to be loaded locally from the source code.
+## This is useful for debugging purposes. Default is FALSE.
+LSLOCAL <- TRUE
 Sys.setenv("ROI_LOAD_PLUGINS" = FALSE)
 library(ROI)
-library(ROI.plugin.lindoapi)
-
+if (LSLOCAL==FALSE) {
+    library(ROI.plugin.lindoapi)
+} else {
+    cat("DEBUG_MODE: Loading the package files manually\n")
+    source("../R/io.R")
+    source("../R/plugin.R")
+    source("../R/status_codes.R")
+    source("../R/zzz.R")
+    .onLoad(libname = NULL, pkgname = "ROI.plugin.lindoapi")
+}
 library(rLindo)
 
 mytol <- 1e-4
@@ -322,6 +333,14 @@ test_read_mps <- function(solver, control) {
     opt <- ROI_solve(x, solver = solver, control)    
 }
 
+## Test reading MPS files
+solve_read_mps <- function(solver, probname, control) {    
+    probfile <- as.character(probname)
+    print(probfile)
+    x <- ROI_read(probfile, "lindo_io")
+    opt <- ROI_solve(x, solver = solver, control)
+}
+
 ## Test writing MPS files
 test_write_mps <- function(solver, control) {
     Q0 <- matrix(c(-33, 6, 0, 6, -22, 11.5, 0, 11.5, -11), byrow = TRUE, ncol = 3)
@@ -540,6 +559,13 @@ if ( !any(solver %in% names(ROI_registered_solvers())) ) {
             local({test_qcqp_03(solver, control)})
         } else if (test_name == "test_read_mps") {
             local({test_read_mps(solver, control)})
+        } else if (test_name == "solve_read_mps") {
+            probname = args[2]
+            if (length(probname) == 0) {
+                message("No problem name provided. Exiting..")
+                return(invisible(NULL))
+            }
+            local({solve_read_mps(solver, probname, control)})            
         } else if (test_name == "test_write_mps") {
             local({test_write_mps(solver, control)})
         } else {
