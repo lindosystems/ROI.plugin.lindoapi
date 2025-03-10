@@ -87,7 +87,7 @@ make_lindoapi_signatures <- function()
 }
 
 ## Only register the solver if it is not already registered
-register_solver <- function(libname, pkgname) {
+register_solver <- function(libname, pkgname, LSLOCAL = FALSE) {
     solver <- "lindoapi"
     ## Solver plugin name (based on package name)
     registered_solvers <- ROI_registered_solvers()
@@ -116,8 +116,8 @@ register_solver <- function(libname, pkgname) {
 
 
 ## Only register the solver if it is not already registered
-.onLoad <- function(libname, pkgname) {
+.onLoad <- function(libname, pkgname, LSLOCAL = FALSE) {
     message("Loading package ", pkgname)
-    register_solver(libname, pkgname)    
+    register_solver(libname, pkgname, LSLOCAL)    
     invisible(NULL)
 }

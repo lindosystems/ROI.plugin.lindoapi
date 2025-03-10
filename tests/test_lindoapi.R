@@ -13,7 +13,7 @@ if (LSLOCAL==FALSE) {
     source("../R/plugin.R")
     source("../R/status_codes.R")
     source("../R/zzz.R")
-    .onLoad(libname = NULL, pkgname = "ROI.plugin.lindoapi")
+    .onLoad(libname = NULL, pkgname = "ROI.plugin.lindoapi", LSLOCAL)
 }
 library(rLindo)
 
