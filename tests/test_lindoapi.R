@@ -1,8 +1,8 @@
 ### Test script for the ROI.plugin.lindoapi package
 
 ## LSLOCAL is a flag to indicate if the package is to be loaded locally from the source code.
-## This is useful for debugging purposes. Default is FALSE.
-LSLOCAL <- TRUE
+## This is useful for tracing the ROI.plugin.lindoapi src. Default is FALSE.
+LSLOCAL <- FALSE
 Sys.setenv("ROI_LOAD_PLUGINS" = FALSE)
 library(ROI)
 if (LSLOCAL==FALSE) {
@@ -434,6 +434,41 @@ on_before_optimize <- function(rEnv, rModel, control)
     return(invisible(NULL))
 }
 
+find_iis <- function(rModel, iis_level=1+2) {
+    res <- rLSfindIIS(rModel,iis_level)
+    if (res$ErrorCode == 0) {
+        cat("IIS found\n")
+        res <- rLSwriteIIS(rModel,"iis.ilp")
+        if (res$ErrorCode == 0) {
+            cat("IIS written to iis.ilp\n")
+        } else {
+            cat("Error writing IIS\n")
+        }
+        res <- rLSgetIIS(rModel) 
+        if (res$ErrorCode == 0) {
+            cat("IIS retrieved\n")
+            print(res)
+            cat(sprintf("\n\t ***  LSfindIIS Summary ***\n\n"))
+            cat(sprintf("\t Number of Sufficient Rows = %d\n",res$pnSuf_r))
+            cat(sprintf("\t Number of Sufficient Cols = %d\n",res$pnSuf_c))
+            cat(sprintf("\t Number of Necessary  Rows = %d\n",res$pnIIS_r - res$pnSuf_r))
+            cat(sprintf("\t Number of Necessary  Cols = %d\n",res$pnIIS_c - res$pnSuf_c))            
+            # Print the IIS rows
+            for (i in 1:res$pnIIS_r) {
+                cat(sprintf("\t IIS Row %d: %s\n",i,res$paiCons[i]))
+            }
+            cat("\n")
+            # Print the IIS columns
+            for (i in 1:res$pnIIS_c) {
+                cat(sprintf("\t IIS Col %d: %s\n",i,res$paiVars[i]))
+            }            
+        } else {
+            cat("Error retrieving IIS\n")
+        }
+    }
+    return(res)
+}
+
 ### Callback function to act on rEnv and rModel in 'rLindo' style after the optimization ends
 ## @param rEnv LINDO enviroment object
 ## @param rModel LINDO model object
@@ -451,16 +486,27 @@ on_after_optimize <- function(rEnv, rModel, control, result)
     ###############################
     ## Insert your code here
     ###############################
-
-    ## e.g. write a solution file
-    solfile <- "on_after_test.sol"
-    nErr = rLSwriteSolution(rModel, solfile)$ErrorCode    
-    if (!is.null(control$verbose) && control$verbose) {
-        if (nErr==0) {
-            cat(">>> Solution written to file: ", solfile, "\n")
-        } else {
-            cat(">>> Error writing solution to file: ", solfile, "\n")
-        }        
+    if (result$status == LS_STATUS_INFEASIBLE) {
+        cat(">>> Model is infeasible\n")
+        res <- find_iis(rModel)
+    } else if (result$status == LS_STATUS_UNBOUNDED) {
+        cat(">>> Model is unbounded\n")
+    } else if (result$status == LS_STATUS_OPTIMAL) {
+        cat(">>> Model is optimal\n")
+        ## e.g. write a solution file
+        solfile <- "on_after_test.sol"
+        nErr = rLSwriteSolution(rModel, solfile)$ErrorCode    
+        if (!is.null(control$verbose) && control$verbose) {
+            if (nErr==0) {
+                cat(">>> Solution written to file: ", solfile, "\n")
+            } else {
+                cat(">>> Error writing solution to file: ", solfile, "\n")
+            }        
+        }
+    } else if (result$status == LS_STATUS_FEASIBLE) {
+        cat(">>> Model is feasible\n")
+    } else {
+        cat(">>> Model is not solved\n")
     }
 
     return(invisible(NULL))
