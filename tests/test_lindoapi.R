@@ -16,8 +16,8 @@ if (LSLOCAL==FALSE) {
     .onLoad(libname = NULL, pkgname = "ROI.plugin.lindoapi", LSLOCAL)
 }
 library(rLindo)
-
 mytol <- 1e-4
+g_result <<- list()  # Initialize as an empty list to serve as a global container to collect output from callbacks, see test_milp_02
 
 check <- function(domain, condition, level=1, message="", call=sys.call(-1L)) {
     if ( isTRUE(condition) ) return(invisible(NULL))
@@ -153,6 +153,9 @@ test_milp_02 <- function(solver, control) {
     sol <- c(5, 2.75, 3)
 
     opt <- ROI_solve(x, solver = solver, control)
+
+    print(g_result) # g_result contains what is collected in on_after_optimize()
+    
     check("MILP-02@01", all(A %*% opt$solution <= b))
     check("MILP-02@04", myequal(opt$solution , sol, tol = mytol))
 }
@@ -503,6 +506,10 @@ on_after_optimize <- function(rEnv, rModel, control, result)
                 cat(">>> Error writing solution to file: ", solfile, "\n")
             }        
         }
+	#Get solution information into a global container 
+	g_result$a_status <<- rLSgetIInfo(rModel,LS_IINFO_MIP_STATUS) # integer type'd info
+	g_result$a_obj <<- rLSgetDInfo(rModel,LS_DINFO_MIP_OBJ) # double type'd info
+	g_result$a_x <<- rLSgetMIPPrimalSolution(rModel)        	    	    
     } else if (result$status == LS_STATUS_FEASIBLE) {
         cat(">>> Model is feasible\n")
     } else {
