@@ -114,14 +114,23 @@ if ( !any(solver %in% names(ROI_registered_solvers())) ) {
     # Print the arguments to debug
     cat("Command-line arguments:", args, "\n")
 
-    # Check if the file path argument is provided
-    if (length(args) == 0) {
-      stop("\n\tUsage: Rscript test_roi_io.R <file>")
-    }
-
     # Use the first argument as the file path
-    file <- args[1]
+    file_or_method <- args[1]
 
+    if (file_or_method == "test_write_mps") {
+        cat("Running test_write_mps...\n")
+        test_write_mps(solver, control)
+    } else if (file_or_method == "test_read_mps") {
+        cat("Running test_read_mps...\n")
+        test_read_mps(solver, control)
+    } else {
+        # Check if the file path argument is provided
+        if (length(args) == 0) {
+            stop("\n\tUsage: Rscript test_roi_io.R <myfile.mps> <test_write_mps> <test_read_mps>\n")
+        }
+        # If the argument is not recognized, treat it as a file path
+        file <- file_or_method
+    }
     # Print the file path to verify the argument is passed correctly
     cat("File path provided:", file, "\n")
 
