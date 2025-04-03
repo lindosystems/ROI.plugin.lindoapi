@@ -49,7 +49,7 @@ After installation, verify that the package is correctly installed and loaded:
 Optionally, run the test script
 ```sh
 	$ cd tests
-	$ Rscript test_lindoapi.ref
+	$ Rscript test_lindoapi.R
 ```	
 
 
