@@ -2,6 +2,12 @@
 
 ## LSLOCAL is a flag to indicate if the package is to be loaded locally from the source code.
 ## This is useful for tracing the ROI.plugin.lindoapi src. Default is FALSE.
+
+## CHANGES
+## 1. Added a new function 'myequal' to replace the 'equal' function in the original code.
+## 2. Added a new function 'check' to replace the 'check' function in the original code.
+## 3. Added results from the 'on_before/after_optimize' function to local variables cbbo/cbao list
+## 4. Added a new function 'find_iis' to find the IIS of the model.
 LSLOCAL <- FALSE
 Sys.setenv("ROI_LOAD_PLUGINS" = FALSE)
 library(ROI)
@@ -17,7 +23,6 @@ if (LSLOCAL==FALSE) {
 }
 library(rLindo)
 mytol <- 1e-4
-g_result <<- list()  # Initialize as an empty list to serve as a global container to collect output from callbacks, see test_milp_02
 
 check <- function(domain, condition, level=1, message="", call=sys.call(-1L)) {
     if ( isTRUE(condition) ) return(invisible(NULL))
@@ -153,9 +158,7 @@ test_milp_02 <- function(solver, control) {
     sol <- c(5, 2.75, 3)
 
     opt <- ROI_solve(x, solver = solver, control)
-
-    print(g_result) # g_result contains what is collected in on_after_optimize()
-    
+    print(opt)
     check("MILP-02@01", all(A %*% opt$solution <= b))
     check("MILP-02@04", myequal(opt$solution , sol, tol = mytol))
 }
@@ -363,80 +366,11 @@ test_write_mps <- function(solver, control) {
     ROI_solve(x, solver = solver, control)
 }
 
-### Callback function to act on rEnv and rModel in 'rLindo' style before the optimization starts
-## @param rEnv LINDO enviroment object
+
+
+## Find the IIS of the model
 ## @param rModel LINDO model object
-## @param control A list of control parameters.
-## @remark This function is called right before the optimization starts, this means
-## no other changes are made to the model after this function is called.
-on_before_optimize <- function(rEnv, rModel, control)
-{
-    if ( is.null(rEnv) || is.null(rModel) ) return(invisible(NULL))
-
-    if (!is.null(control$verbose) && control$verbose) {
-        cat(">>> on_before_optimize acting on rEnv and rModel\n")
-    }    
-    ###############################
-    ## Insert your code here
-    ###############################
-    
-    ## e.g. Display model stats
-    numVars <- rLSgetIInfo(rModel,LS_IINFO_NUM_VARS)[2]$pnResult
-    numCont <- rLSgetIInfo(rModel,LS_IINFO_NUM_CONT)[2]$pnResult
-    modelType <- rLSgetIInfo(rModel,LS_IINFO_MODEL_TYPE)[2]$pnResult
-    if (!is.null(control$verbose) && control$verbose) {
-        cat(sprintf(">>> Model has %d variables, %d continuous variables and has a model-id '%d'\n", numVars, numCont, modelType))
-    }
-
-    ## e.g. write an MPS file
-    if (0>1) {
-        filename <- "on_before_test.mps"
-        nErr = rLSwriteMPSFile(rModel, filename, LS_UNFORMATTED_MPS)$ErrorCode    
-        if (!is.null(control$verbose) && control$verbose) {    
-            if (nErr==0) {
-                cat(">>> Model written to file: ", filename, "\n")
-            } else {
-                cat(">>> Error writing model to file: ", filename, "\n")
-            }
-        }
-    }
-
-    ## e.g. display the parameters which are set to non-default values right before the optimization starts
-    if (2>1) {
-        cat("\n>>> Displaying non-default parameters\n")
-        cnt <- ROI_registered_solver_control(solver)
-        for (i in 1:nrow(cnt)) {
-            par_key <- as.character(cnt$control[i])
-            r <- rLSgetParamMacroID(rEnv, par_key)
-            if (r$ErrorCode != 0 && grepl("LS_", par_key)) {
-                cat(sprintf(">>> Error getting parameter id for %s\n", par_key))
-                next
-            } else {
-                par_id = r$pnParam
-                if (grepl("LS_IPARAM", par_key)) {
-                    par_e <- rLSgetEnvIntParameter(rEnv, par_id)
-                    par_m <- rLSgetModelIntParameter(rModel, par_id)
-                    if (!is.null(par_e$pnValue) && !is.na(par_e$pnValue) && 
-                        !is.null(par_m$pnValue) && !is.na(par_m$pnValue) && 
-                        par_m$pnValue != par_e$pnValue) {
-                        cat(sprintf(">>> %s = %d (default = %d)\n", par_key, par_m$pnValue, par_e$pnValue))
-                    }
-                } else if (grepl("LS_DPARAM", par_key)) {
-                    par_e <- rLSgetEnvDouParameter(rEnv, par_id)
-                    par_m <- rLSgetModelDouParameter(rModel, par_id)
-                    if (!is.null(par_e$pdValue) && !is.na(par_e$pdValue) && 
-                        !is.null(par_m$pdValue) && !is.na(par_m$pdValue) && 
-                        par_m$pdValue != par_e$pdValue) {
-                        cat(sprintf(">>> %s = %g (default = %g)\n", par_key, par_m$pdValue, par_e$pdValue))
-                    }
-                }
-            }
-        }
-    }
-
-    return(invisible(NULL))
-}
-
+## @param iis_level The level of the IIS to be found. Default is 1+2.
 find_iis <- function(rModel, iis_level=1+2) {
     res <- rLSfindIIS(rModel,iis_level)
     if (res$ErrorCode == 0) {
@@ -472,53 +406,6 @@ find_iis <- function(rModel, iis_level=1+2) {
     return(res)
 }
 
-### Callback function to act on rEnv and rModel in 'rLindo' style after the optimization ends
-## @param rEnv LINDO enviroment object
-## @param rModel LINDO model object
-## @param control A list of control parameters.
-## @param result A list of results.
-### @remark This function is called right after the optimization ends, this means
-## no other changes are made to the model before this function is called.
-on_after_optimize <- function(rEnv, rModel, control, result)
-{
-    if ( is.null(rEnv) || is.null(rModel) ) return(invisible(NULL))
-
-    if (!is.null(control$verbose) && control$verbose) {
-        cat(">>> on_after_optimize acting on rEnv and rModel\n")
-    }    
-    ###############################
-    ## Insert your code here
-    ###############################
-    if (result$status == LS_STATUS_INFEASIBLE) {
-        cat(">>> Model is infeasible\n")
-        res <- find_iis(rModel)
-    } else if (result$status == LS_STATUS_UNBOUNDED) {
-        cat(">>> Model is unbounded\n")
-    } else if (result$status == LS_STATUS_OPTIMAL) {
-        cat(">>> Model is optimal\n")
-        ## e.g. write a solution file
-        solfile <- "on_after_test.sol"
-        nErr = rLSwriteSolution(rModel, solfile)$ErrorCode    
-        if (!is.null(control$verbose) && control$verbose) {
-            if (nErr==0) {
-                cat(">>> Solution written to file: ", solfile, "\n")
-            } else {
-                cat(">>> Error writing solution to file: ", solfile, "\n")
-            }        
-        }
-	#Get solution information into a global container 
-	g_result$a_status <<- rLSgetIInfo(rModel,LS_IINFO_MIP_STATUS) # integer type'd info
-	g_result$a_obj <<- rLSgetDInfo(rModel,LS_DINFO_MIP_OBJ) # double type'd info
-	g_result$a_x <<- rLSgetMIPPrimalSolution(rModel)        	    	    
-    } else if (result$status == LS_STATUS_FEASIBLE) {
-        cat(">>> Model is feasible\n")
-    } else {
-        cat(">>> Model is not solved\n")
-    }
-
-    return(invisible(NULL))
-}
-
 source("test_cb.R")
 
 solver <- "lindoapi"
@@ -527,17 +414,18 @@ if ( !any(solver %in% names(ROI_registered_solvers())) ) {
     cat(sprintf("ROI.plugin.%s is not registered.\n", solver))
 } else {
     print("Start Testing!")
-    control <- list()
+    control <- list()    
     # ROI-like control parameters
     control$time_limit <- 60
-    control$use_gop <- TRUE
+    control$use_gop <- FALSE
     control$method <- LS_METHOD_FREE
     control$verbose <- TRUE
     
     # Native Lindo parameters
     control$LS_DPARAM_SOLVER_FEASTOL <- 1e-6
     control$LS_DPARAM_SOLVER_OPTTOL <- 1e-6
-    control$LS_DPARAM_SOLVER_TIMLMT <- 100    
+    control$LS_DPARAM_SOLVER_TIMLMT <- 100  
+    #control$LS_IPARAM_MIP_PRELEVEL <- 0  
 
     # Callback functions
     control$on_before_optimize <- on_before_optimize

@@ -84,9 +84,10 @@ lindoapi_solve_model <- function(rEnv, rModel, control = list()) {
         }
     }
 
+    cbbo <- NULL
     # Call the before optimization callback, if defined
     if (!is.null(on_before_optimize) && is.function(on_before_optimize)) {
-        on_before_optimize(rEnv, rModel, control)
+        cbbo <- on_before_optimize(rEnv, rModel, control)
     }
 
     nfo = list()
@@ -107,12 +108,12 @@ lindoapi_solve_model <- function(rEnv, rModel, control = list()) {
             nfo$type <- rLSgetIInfo(rModel,LS_IINFO_BASIC_STATUS)[2]$pnResult
         }
         r$x <- rLSgetPrimalSolution(rModel)$padPrimal
-        r$pi = rLSgetDualSolution(rModel)$padDual
+        r$pi <- rLSgetDualSolution(rModel)$padDual
         r$status <- rLSgetIInfo(rModel,LS_IINFO_MODEL_STATUS)[2]$pnResult 
         r$objval <- rLSgetDInfo(rModel,LS_DINFO_POBJ)[2]$pdResult
         r$lpstat <- r$status
-        r$dj = rLSgetReducedCosts(rModel)$padReducedCost
-        r$slack = rLSgetSlacks(rModel)$padSlack
+        r$dj <- rLSgetReducedCosts(rModel)$padReducedCost
+        r$slack <- rLSgetSlacks(rModel)$padSlack
     } 
     else {
         if (use_gop==FALSE)  {
@@ -123,25 +124,35 @@ lindoapi_solve_model <- function(rEnv, rModel, control = list()) {
             r$status <- rLSgetIInfo(rModel,LS_IINFO_MIP_STATUS)[2]$pnResult 
             r$objval <- rLSgetDInfo(rModel,LS_DINFO_MIP_OBJ)[2]$pdResult
             nfo$method <- rLSgetIInfo(rModel,LS_IINFO_METHOD)[2]$pnResult
-            nfo$type <- rLSgetIInfo(rModel,LS_IINFO_BASIC_STATUS)[2]$pnResult            
+            nfo$type <- rLSgetIInfo(rModel,LS_IINFO_BASIC_STATUS)[2]$pnResult
         } else {
             r$status <- rLSgetIInfo(rModel,LS_IINFO_GOP_STATUS)[2]$pnResult 
             r$objval <- rLSgetDInfo(rModel,LS_DINFO_GOP_OBJ)[2]$pdResult
             nfo$method <- LS_METHOD_GOP
-            nfo$type <- rLSgetIInfo(rModel,LS_IINFO_GOP_STATUS)[2]$pnResult            
+            nfo$type <- rLSgetIInfo(rModel,LS_IINFO_GOP_STATUS)[2]$pnResult
         }
-        r$x <- rLSgetMIPPrimalSolution(rModel)$padPrimal        
-        r$slack = rLSgetMIPSlacks(rModel)$padSlack        
+        r$x <- rLSgetMIPPrimalSolution(rModel)$padPrimal
+        r$slack <- rLSgetMIPSlacks(rModel)$padSlack
     }
-
+    
     result <- c(r, info = nfo)
 
+    cbao <- NULL
     # Call the after optimization callback, if defined
     if (!is.null(on_after_optimize) && is.function(on_after_optimize)) {
-        on_after_optimize(rEnv, rModel, control, result)
+        cbao <- on_after_optimize(rEnv, rModel, control, result)
     }
 
-    result
+    # Copy the callback results to the result object
+    if (!is.null(cbao)) {
+        result$cbao <- cbao
+    }
+
+    if (!is.null(cbbo)) {
+        result$cbbo <- cbbo
+    }    
+
+    return(result)
     
 }
 
@@ -179,9 +190,9 @@ lindoapi_read_file <- function(rEnv, rModel, file, control = list()) {
     if (!is.null(control$verbose) && control$verbose == TRUE) {
         R.utils::printf("Successfully read the model from file '%s'.\n", file)
     }
-    cat("Pausing for 10 seconds...\n")
+    #cat("Pausing for 10 seconds...\n")
     #Sys.sleep(20)
-    cat("Resuming execution.\n")
+    #cat("Resuming execution.\n")
 
     return(r)
 }
