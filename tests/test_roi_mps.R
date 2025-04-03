@@ -92,7 +92,7 @@ if ( !any(solver %in% names(ROI_registered_solvers())) ) {
     control <- list()
     # ROI-like control parameters
     control$time_limit <- 60
-    control$use_gop <- FALSE
+    control$use_gop <- TRUE
     control$method <- LS_METHOD_FREE
     control$verbose <- TRUE
     
@@ -120,7 +120,7 @@ if ( !any(solver %in% names(ROI_registered_solvers())) ) {
     if (length(args) == 0) {
         stop("\n\tUsage: Rscript test_roi_io.R <myfile.mps> <test_write_mps> <test_read_mps>\n")
     }
-    
+
     if (file_or_method == "test_write_mps") {
         cat("Running test_write_mps...\n")
         test_write_mps(solver, control)
@@ -131,11 +131,11 @@ if ( !any(solver %in% names(ROI_registered_solvers())) ) {
         # Check if the file path argument is provided
         # If the argument is not recognized, treat it as a file path
         file <- file_or_method
-    }
-    # Print the file path to verify the argument is passed correctly
-    cat("File path provided:", file, "\n")
+        # Print the file path to verify the argument is passed correctly
+        cat(sprintf("File path provided: %s\n", as.character(file_or_method)))
 
-    x <- lindoapi_read_op(file, control)
-	sol <- ROI_solve(x, solver = solver, control)    
-    print(sol$message)
+        x <- lindoapi_read_op(file, control)
+        sol <- ROI_solve(x, solver = solver, control)    
+        print(sol$message)
+    }
 }

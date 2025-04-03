@@ -417,7 +417,7 @@ if ( !any(solver %in% names(ROI_registered_solvers())) ) {
     control <- list()    
     # ROI-like control parameters
     control$time_limit <- 60
-    control$use_gop <- FALSE
+    control$use_gop <- TRUE
     control$method <- LS_METHOD_FREE
     control$verbose <- TRUE
     
