@@ -118,7 +118,7 @@ if ( !any(solver %in% names(ROI_registered_solvers())) ) {
     file_or_method <- args[1]
 
     if (length(args) == 0) {
-        stop("\n\tUsage: Rscript test_roi_io.R <myfile.mps> <test_write_mps> <test_read_mps>\n")
+        stop("\n\tUsage: Rscript test_roi_io.R <myfile.mps>\n")
     }
 
     if (file_or_method == "test_write_mps") {
