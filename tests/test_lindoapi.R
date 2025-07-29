@@ -290,13 +290,13 @@ test_qcqp_01 <- function(solver, control) {
 ##               x_1 - 3 x_2 +   x_3   <= 30
 ##               1/2 (2 x_1^2 + 2 x_2^2 + 2 x_3^2) <= 1
 test_qcqp_02 <- function(solver, control) {
-`    Q0 <- matrix(c(-33, 6, 0, 6, -22, 11.5, 0, 11.5, -11), byrow = TRUE, ncol = 3)
+    Q0 <- matrix(c(-33, 6, 0, 6, -22, 11.5, 0, 11.5, -11), byrow = TRUE, ncol = 3)
     L0 <- c(1, 2, 3)
     QC <- list(NULL, NULL, diag(2, nrow = 3))
     LC <- matrix(c(-1, 1, 1, 1, -3, 1, 0, 0, 0), byrow = TRUE, ncol = 3)
     x <- OP(Q_objective(Q = Q0, L = L0),
             Q_constraint(Q = QC, L = LC, dir = leq(3), rhs = c(20, 30, 1)),
-            maximum = TRUE)`
+            maximum = TRUE)
     
     opt <- ROI_solve(x, solver = solver, control)#, method = "lpopt")
 
@@ -458,7 +458,7 @@ if ( !any(solver %in% names(ROI_registered_solvers())) ) {
             local({test_qp_03(solver, control)})
             local({test_qp_04(solver, control)})
             local({test_qcqp_01(solver, control)})
-            #local({test_qcqp_02(solver, control)})
+            local({test_qcqp_02(solver, control)})
             local({test_qcqp_03(solver, control)})
         }
 
