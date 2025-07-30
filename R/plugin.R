@@ -164,6 +164,18 @@ lindoapi_load_qp <- function(x, rEnv, rModel) {
     if ( is_qcon ) { # q-constraints
         QL <- terms(constraints(x))$Q
         is_lconstr <- sapply(QL, is_zero_matrix)
+        
+        # Check if any TRUE appears after the last FALSE in is_lconstr
+        if (any(!is_lconstr)) {
+            last_false_idx <- max(which(!is_lconstr))
+            if (any(is_lconstr[seq(last_false_idx + 1, length(is_lconstr))])) {
+                message("CRITICAL: Linear constraints found after quadratic constraints.")                
+                message("CRITICAL: L-constraints must precede all Q-constraints.")
+                message("Halting the optimization process.")
+                stop()
+            }
+        }
+        
         mat <- make_csc_matrix(constraints(x)$L[is_lconstr,])
         as.matrix(constraints(x)$L[is_lconstr,])
         xsense <- map_sense(x)
@@ -171,6 +183,7 @@ lindoapi_load_qp <- function(x, rEnv, rModel) {
         nRows <- sum(is_lconstr)
         rhs <- xrhs[is_lconstr]
         sense <- xsense[is_lconstr]
+
     } else {
         mat <- make_csc_matrix(constraints(x)$L)
         sense <- map_sense(x)

@@ -305,6 +305,27 @@ test_qcqp_02 <- function(solver, control) {
     check("QCQP-02@02", myequal(solution(opt, "objval"), 2.00234664731505, tol = mytol) )  
 }
 
+## QCP (this is qcpex1.c in the CPLEX examples) - rearranged constraints
+## maximize:     x_1 + 2 x_2 + 3 x_3 - 1/2 (33 x_1^2 + 22 x_2^2 + 11 x_3^2) + 6 x_1 x_2 + 11.5 x_2 x_3
+## subject to:   1/2 (2 x_1^2 + 2 x_2^2 + 2 x_3^2) <= 1
+##             - x_1 +   x_2 +   x_3   <= 20
+##               x_1 - 3 x_2 +   x_3   <= 30
+test_qcqp_02b <- function(solver, control) {
+    Q0 <- matrix(c(-33, 6, 0, 6, -22, 11.5, 0, 11.5, -11), byrow = TRUE, ncol = 3)
+    L0 <- c(1, 2, 3)
+    QC <- list(diag(2, nrow = 3), NULL, NULL)
+    LC <- matrix(c(0, 0, 0, -1, 1, 1, 1, -3, 1), byrow = TRUE, ncol = 3)
+    x <- OP(Q_objective(Q = Q0, L = L0),
+            Q_constraint(Q = QC, L = LC, dir = leq(3), rhs = c(1, 20, 30)),
+            maximum = TRUE)
+    
+    opt <- ROI_solve(x, solver = solver, control)#, method = "lpopt")
+
+    solution <- c(0.12912360513025, 0.549952824880058, 0.825153905632591)
+    check("QCQP-02b@01", myequal(solution(opt), solution, tol = mytol) )
+    check("QCQP-02b@02", myequal(solution(opt, "objval"), 2.00234664731505, tol = mytol) )  
+}
+
 test_qcqp_03 <- function(solver, control) {
     Q0 <- matrix(c(-33, 6, 0, 6, -22, 11.5, 0, 11.5, -11), byrow = TRUE, ncol = 3)
     L0 <- c(1, 2, 3)
@@ -510,7 +531,13 @@ if ( !any(solver %in% names(ROI_registered_solvers())) ) {
         } else if (test_name == "test_write_mps") {
             local({test_write_mps(solver, control)})
         } else {
-            message("Specified test not found..")
+            # try 
+            test_ <- get(test_name, envir = .GlobalEnv)
+            if (is.function(test_)) {
+                local({test_(solver, control)})
+            } else {
+                stop(sprintf("Test '%s' is not a valid function.", test_name))
+            }
         }
     }
 
