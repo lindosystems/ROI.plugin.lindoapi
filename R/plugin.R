@@ -165,14 +165,28 @@ lindoapi_load_qp <- function(x, rEnv, rModel) {
         QL <- terms(constraints(x))$Q
         is_lconstr <- sapply(QL, is_zero_matrix)
         
-        # Check if any TRUE appears after the last FALSE in is_lconstr
+        ## All L-constraints must precede all Q-constraints.  rLSaddQCterms()
+        ## below addresses its target row by the ROI constraint index (i-1L),
+        ## which only coincides with the row rLSaddConstraints() appended the
+        ## constraint to when the Q-constraints occupy the tail of the list.
+        ## Anchor on the FIRST Q-constraint: any L-constraint at or after it
+        ## breaks that correspondence.  Anchoring on the LAST one instead is
+        ## wrong twice over -- it misses an L-constraint sandwiched between two
+        ## Q-constraints, and it indexes one past the end whenever the final
+        ## constraint is quadratic, which is precisely the required layout.
         if (any(!is_lconstr)) {
-            last_false_idx <- max(which(!is_lconstr))
-            if (any(is_lconstr[seq(last_false_idx + 1, length(is_lconstr))])) {
-                message("CRITICAL: Linear constraints found after quadratic constraints.")                
+            first_qconstr_idx <- min(which(!is_lconstr))
+            lconstr_idx <- which(is_lconstr)
+            trailing_lconstr <- lconstr_idx[lconstr_idx > first_qconstr_idx]
+            if (length(trailing_lconstr) > 0L) {
+                message("CRITICAL: Linear constraints found after quadratic constraints.")
                 message("CRITICAL: L-constraints must precede all Q-constraints.")
+                message(sprintf("CRITICAL: first Q-constraint is at index %d.",
+                                first_qconstr_idx))
+                message(sprintf("CRITICAL: L-constraint(s) at index %s follow it.",
+                                paste(trailing_lconstr, collapse = ", ")))
                 message("Halting the optimization process.")
-                stop()
+                stop("lindoapi: L-constraints must precede all Q-constraints.")
             }
         }
         

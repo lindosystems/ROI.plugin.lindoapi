@@ -305,7 +305,28 @@ test_qcqp_02 <- function(solver, control) {
     check("QCQP-02@02", myequal(solution(opt, "objval"), 2.00234664731505, tol = mytol) )  
 }
 
+## Helper for the constraint-ordering guard in lindoapi_load_qp.
+## A misordered model must be REJECTED with the ordering diagnostic.  It must
+## never (a) crash with an out-of-bounds index error, nor (b) be solved, since
+## rLSaddQCterms addresses rows by the ROI constraint index and therefore
+## attaches the quadratic terms to the wrong row when the order is violated.
+expect_order_rejected <- function(domain, solver, x, control) {
+    msg <- tryCatch({ ROI_solve(x, solver = solver, control); NA_character_ },
+                    error = function(e) conditionMessage(e))
+    check(paste0(domain, "@rejected"), !is.na(msg),
+          message = "misordered model was solved instead of rejected")
+    check(paste0(domain, "@no-oob"),
+          !identical(msg, "missing value where TRUE/FALSE needed"),
+          message = "guard crashed on an out-of-bounds index")
+    check(paste0(domain, "@diagnosable"), isTRUE(nzchar(msg)),
+          message = "guard raised an error with an empty message")
+    cat(sprintf("  %s: rejected with <%s>\n", domain,
+                if (is.na(msg)) "NO ERROR - SOLVED" else msg))
+}
+
 ## QCP (this is qcpex1.c in the CPLEX examples) - rearranged constraints
+## The Q-constraint is placed FIRST, which violates the ordering the plugin
+## requires, so this model must be rejected by the ordering guard.
 ## maximize:     x_1 + 2 x_2 + 3 x_3 - 1/2 (33 x_1^2 + 22 x_2^2 + 11 x_3^2) + 6 x_1 x_2 + 11.5 x_2 x_3
 ## subject to:   1/2 (2 x_1^2 + 2 x_2^2 + 2 x_3^2) <= 1
 ##             - x_1 +   x_2 +   x_3   <= 20
@@ -318,12 +339,34 @@ test_qcqp_02b <- function(solver, control) {
     x <- OP(Q_objective(Q = Q0, L = L0),
             Q_constraint(Q = QC, L = LC, dir = leq(3), rhs = c(1, 20, 30)),
             maximum = TRUE)
-    
-    opt <- ROI_solve(x, solver = solver, control)#, method = "lpopt")
 
-    solution <- c(0.12912360513025, 0.549952824880058, 0.825153905632591)
-    check("QCQP-02b@01", myequal(solution(opt), solution, tol = mytol) )
-    check("QCQP-02b@02", myequal(solution(opt, "objval"), 2.00234664731505, tol = mytol) )  
+    expect_order_rejected("QCQP-02b", solver, x, control)
+}
+
+## QCP (qcpex1.c again) - constraints INTERLEAVED as L,Q,L,Q.
+## The final constraint is quadratic, so the ordering looks correct to a check
+## anchored on the LAST quadratic row; it is not - constraint 3 is linear and
+## follows the quadratic constraint 2.  Guards against a regression of the
+## `max(which(!is_lconstr))` bug, which both crashed here and, once the crash
+## was removed, would have let this model through to a silently wrong answer.
+## maximize:     x_1 + 2 x_2 + 3 x_3 - 1/2 (33 x_1^2 + 22 x_2^2 + 11 x_3^2) + 6 x_1 x_2 + 11.5 x_2 x_3
+## subject to: - x_1 +   x_2 +   x_3   <= 20
+##               1/2 (2 x_1^2 + 2 x_2^2 + 2 x_3^2) <= 1
+##               x_1 - 3 x_2 +   x_3   <= 30
+##               1/2 (2 x_1^2 + 2 x_2^2 + 2 x_3^2) <= 4
+test_qcqp_02c <- function(solver, control) {
+    Q0 <- matrix(c(-33, 6, 0, 6, -22, 11.5, 0, 11.5, -11), byrow = TRUE, ncol = 3)
+    L0 <- c(1, 2, 3)
+    QC <- list(NULL, diag(2, nrow = 3), NULL, diag(2, nrow = 3))
+    LC <- matrix(c(-1,  1, 1,
+                    0,  0, 0,
+                    1, -3, 1,
+                    0,  0, 0), byrow = TRUE, ncol = 3)
+    x <- OP(Q_objective(Q = Q0, L = L0),
+            Q_constraint(Q = QC, L = LC, dir = leq(4), rhs = c(20, 1, 30, 4)),
+            maximum = TRUE)
+
+    expect_order_rejected("QCQP-02c", solver, x, control)
 }
 
 test_qcqp_03 <- function(solver, control) {
@@ -480,6 +523,8 @@ if ( !any(solver %in% names(ROI_registered_solvers())) ) {
             local({test_qp_04(solver, control)})
             local({test_qcqp_01(solver, control)})
             local({test_qcqp_02(solver, control)})
+            local({test_qcqp_02b(solver, control)})
+            local({test_qcqp_02c(solver, control)})
             local({test_qcqp_03(solver, control)})
         }
 
@@ -517,6 +562,10 @@ if ( !any(solver %in% names(ROI_registered_solvers())) ) {
             local({test_qcqp_01(solver, control)})
         } else if (test_name == "test_qcqp_02") {
             local({test_qcqp_02(solver, control)})
+        } else if (test_name == "test_qcqp_02b") {
+            local({test_qcqp_02b(solver, control)})
+        } else if (test_name == "test_qcqp_02c") {
+            local({test_qcqp_02c(solver, control)})
         } else if (test_name == "test_qcqp_03") {
             local({test_qcqp_03(solver, control)})
         } else if (test_name == "test_read_mps") {
