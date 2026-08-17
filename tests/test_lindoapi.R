@@ -448,6 +448,35 @@ test_qcqp_reorder_duals <- function(solver, control) {
     }
 }
 
+## Reordering is not silent.  A model that has to be reordered says so, naming
+## the permutation applied; one already in the required order permutes to the
+## identity and must stay quiet.
+test_qcqp_reorder_notice <- function(solver, control) {
+    grab_messages <- function(x) {
+        msgs <- character()
+        withCallingHandlers(ROI_solve(x, solver = solver, control),
+                            message = function(m) {
+                                msgs <<- c(msgs, conditionMessage(m))
+                                invokeRestart("muffleMessage")
+                            })
+        msgs
+    }
+    hit <- function(msgs) grep("reordered for LINDO", msgs, value = TRUE, fixed = TRUE)
+
+    reordered <- grab_messages(qcpex1_permuted(c(3, 1, 2)))
+    ordered   <- grab_messages(qcpex1_permuted(c(1, 2, 3)))
+
+    cat(sprintf("  reordered model said: %s",
+                if (length(hit(reordered))) hit(reordered)[1] else "<nothing>\n"))
+    cat(sprintf("  ordered model said  : %s\n",
+                if (length(hit(ordered))) hit(ordered)[1] else "<nothing, as expected>"))
+
+    check("QCQP-REORDER-NOTICE@01", length(hit(reordered)) > 0L,
+          message = "no notice emitted for a model that had to be reordered")
+    check("QCQP-REORDER-NOTICE@02", length(hit(ordered)) == 0L,
+          message = "notice emitted for a model that was already in the required order")
+}
+
 ## The MIP branch of lindoapi_solve_model reports slacks but no duals, so it
 ## takes a different path through the row mapping than the continuous branch
 ## covered above.  A permuted MIP QCP must reach the same optimum as its
@@ -632,6 +661,7 @@ if ( !any(solver %in% names(ROI_registered_solvers())) ) {
             local({test_qcqp_02c(solver, control)})
             local({test_qcqp_reorder(solver, control)})
             local({test_qcqp_reorder_duals(solver, control)})
+            local({test_qcqp_reorder_notice(solver, control)})
             local({test_qcqp_reorder_mip(solver, control)})
             local({test_qcqp_03(solver, control)})
         }
@@ -678,6 +708,8 @@ if ( !any(solver %in% names(ROI_registered_solvers())) ) {
             local({test_qcqp_reorder(solver, control)})
         } else if (test_name == "test_qcqp_reorder_duals") {
             local({test_qcqp_reorder_duals(solver, control)})
+        } else if (test_name == "test_qcqp_reorder_notice") {
+            local({test_qcqp_reorder_notice(solver, control)})
         } else if (test_name == "test_qcqp_reorder_mip") {
             local({test_qcqp_reorder_mip(solver, control)})
         } else if (test_name == "test_qcqp_03") {

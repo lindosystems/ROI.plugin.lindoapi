@@ -208,6 +208,22 @@ lindoapi_load_qp <- function(x, rEnv, rModel, control = list()) {
         ## LINDO row came from, and is the identity whenever the caller had
         ## already ordered the constraints that way.
         row_perm <- unname(c(which(is_lconstr), which(!is_lconstr)))
+        reorder <- use_reorder_constraints(control)
+
+        ## Say so when a reorder actually happens.  The model the solver sees is
+        ## then not row-for-row the model that was supplied, and the per-row
+        ## results are mapped back on the way out, so neither should be silent.
+        ## A model already in the required order permutes to the identity and
+        ## says nothing.  message() rather than warning(): reordering is correct,
+        ## documented, default behaviour, and a solve loop would otherwise
+        ## collapse into "There were 50 or more warnings".
+        if ( reorder && !identical(row_perm, seq_along(row_perm)) ) {
+            message("NOTE: L-constraints do not all precede the Q-constraints.")
+            message(sprintf("NOTE: constraints reordered for LINDO as (%s).",
+                            paste(row_perm, collapse = ", ")))
+            message("NOTE: duals and slacks are mapped back to the ROI order on return.")
+            message("NOTE: set control 'reorder_constraints' to FALSE to reject instead.")
+        }
 
         ## With reordering disabled the caller is responsible for the ordering,
         ## so check it.  Anchor on the FIRST Q-constraint: any L-constraint at
@@ -215,7 +231,7 @@ lindoapi_load_qp <- function(x, rEnv, rModel, control = list()) {
         ## wrong twice over -- it misses an L-constraint sandwiched between two
         ## Q-constraints, and it indexes one past the end whenever the final
         ## constraint is quadratic, which is precisely the required layout.
-        if ( !use_reorder_constraints(control) && any(!is_lconstr) ) {
+        if ( !reorder && any(!is_lconstr) ) {
             first_qconstr_idx <- min(which(!is_lconstr))
             lconstr_idx <- which(is_lconstr)
             trailing_lconstr <- lconstr_idx[lconstr_idx > first_qconstr_idx]

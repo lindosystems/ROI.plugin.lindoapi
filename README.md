@@ -86,3 +86,14 @@ whose L-constraints do not all precede its Q-constraints is rejected rather than
 ```r
 		> control$reorder_constraints <- FALSE   # default is TRUE
 ```
+
+When a model actually has to be reordered the plugin reports it, naming the permutation applied. A model whose
+constraints are already in the required order is reordered by the identity and stays silent. The report is a
+`message()`, so `suppressMessages()` silences it when solving in a loop.
+
+```r
+		NOTE: L-constraints do not all precede the Q-constraints.
+		NOTE: constraints reordered for LINDO as (2, 3, 1).
+		NOTE: duals and slacks are mapped back to the ROI order on return.
+		NOTE: set control 'reorder_constraints' to FALSE to reject instead.
+```
