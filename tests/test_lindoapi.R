@@ -311,6 +311,7 @@ test_qcqp_02 <- function(solver, control) {
 ## rLSaddQCterms addresses rows by the ROI constraint index and therefore
 ## attaches the quadratic terms to the wrong row when the order is violated.
 expect_order_rejected <- function(domain, solver, x, control) {
+    control$reorder_constraints <- FALSE   # opt out of the reordering below
     msg <- tryCatch({ ROI_solve(x, solver = solver, control); NA_character_ },
                     error = function(e) conditionMessage(e))
     check(paste0(domain, "@rejected"), !is.na(msg),
@@ -367,6 +368,110 @@ test_qcqp_02c <- function(solver, control) {
             maximum = TRUE)
 
     expect_order_rejected("QCQP-02c", solver, x, control)
+}
+
+## The qcpex1 model of test_qcqp_02 with its constraints supplied in an
+## arbitrary order: perm[k] names the base constraint that becomes constraint
+## k.  Every permutation describes the SAME problem, so all of them must reach
+## the same optimum once the plugin reorders internally.
+##   base 1 (L): - x_1 +   x_2 +   x_3 <= 20
+##   base 2 (L):   x_1 - 3 x_2 +   x_3 <= 30
+##   base 3 (Q):   1/2 (2 x_1^2 + 2 x_2^2 + 2 x_3^2) <= 1
+qcpex1_permuted <- function(perm, types = NULL) {
+    Q0  <- matrix(c(-33, 6, 0, 6, -22, 11.5, 0, 11.5, -11), byrow = TRUE, ncol = 3)
+    L0  <- c(1, 2, 3)
+    QC  <- list(NULL, NULL, diag(2, nrow = 3))
+    LC  <- matrix(c(-1,  1, 1,
+                     1, -3, 1,
+                     0,  0, 0), byrow = TRUE, ncol = 3)
+    rhs <- c(20, 30, 1)
+    OP(Q_objective(Q = Q0, L = L0),
+       Q_constraint(Q = QC[perm], L = LC[perm, , drop = FALSE],
+                    dir = leq(length(perm)), rhs = rhs[perm]),
+       types = types,
+       maximum = TRUE)
+}
+
+## Constraint reordering, controlled by `reorder_constraints` (default TRUE).
+## Each permutation of the qcpex1 constraints must reach the optimum that
+## test_qcqp_02 reaches with the Q-constraint already last.
+test_qcqp_reorder <- function(solver, control) {
+    solution <- c(0.12912360513025, 0.549952824880058, 0.825153905632591)
+    perms <- list(c(1, 2, 3),   # L,L,Q -- already in the required order
+                  c(3, 1, 2),   # Q,L,L
+                  c(1, 3, 2),   # L,Q,L
+                  c(2, 3, 1),   # L,Q,L
+                  c(3, 2, 1))   # Q,L,L
+    for (p in perms) {
+        tag <- paste(p, collapse = "")
+        opt <- ROI_solve(qcpex1_permuted(p), solver = solver, control)
+        check(sprintf("QCQP-REORDER-%s@01", tag),
+              myequal(solution(opt, "objval"), 2.00234664731505, tol = mytol) )
+        check(sprintf("QCQP-REORDER-%s@02", tag),
+              myequal(solution(opt), solution, tol = mytol) )
+    }
+}
+
+## Reordering must not misattribute per-row results.  rLSgetDualSolution() and
+## rLSgetSlacks() are indexed by LINDO row, and reordering moves rows, so the
+## plugin has to invert the permutation before handing them back.  Solve the
+## base model and a permuted twin: every per-row quantity must follow its own
+## constraint, i.e. twin[k] == base[perm[k]].
+test_qcqp_reorder_duals <- function(solver, control) {
+    perm <- c(3, 1, 2)
+
+    base <- ROI_solve(qcpex1_permuted(c(1, 2, 3)), solver = solver, control)
+    twin <- ROI_solve(qcpex1_permuted(perm),       solver = solver, control)
+
+    check("QCQP-REORDER-DUAL@objval",
+          myequal(solution(twin, "objval"), solution(base, "objval"), tol = mytol) )
+
+    for (nm in c("pi", "slack")) {
+        bv <- base$message[[nm]]
+        tv <- twin$message[[nm]]
+        if (is.null(bv) || is.null(tv)) {
+            cat(sprintf("  QCQP-REORDER-DUAL: %s not reported, skipped\n", nm))
+            next
+        }
+        cat(sprintf("  %-5s base = (%s)\n", nm,
+                    paste(signif(bv, 8), collapse = ", ")))
+        cat(sprintf("  %-5s twin = (%s) expected (%s)\n", nm,
+                    paste(signif(tv, 8), collapse = ", "),
+                    paste(signif(bv[perm], 8), collapse = ", ")))
+        check(sprintf("QCQP-REORDER-DUAL@%s-len", nm),
+              isTRUE(length(tv) == length(bv)),
+              message = sprintf("%s has length %d, expected %d",
+                                nm, length(tv), length(bv)))
+        check(sprintf("QCQP-REORDER-DUAL@%s", nm),
+              myequal(tv, bv[perm], tol = mytol),
+              message = sprintf("%s is not reported against the original constraints", nm))
+    }
+}
+
+## The MIP branch of lindoapi_solve_model reports slacks but no duals, so it
+## takes a different path through the row mapping than the continuous branch
+## covered above.  A permuted MIP QCP must reach the same optimum as its
+## ordered twin and report its slacks against its own constraints.
+test_qcqp_reorder_mip <- function(solver, control) {
+    perm  <- c(3, 1, 2)
+    types <- c("B", "C", "I")
+
+    base <- ROI_solve(qcpex1_permuted(c(1, 2, 3), types), solver = solver, control)
+    twin <- ROI_solve(qcpex1_permuted(perm, types),       solver = solver, control)
+
+    check("QCQP-REORDER-MIP@01",
+          myequal(solution(twin, "objval"), 0.0909090909090907, tol = mytol) )
+    check("QCQP-REORDER-MIP@02",
+          myequal(solution(twin, "objval"), solution(base, "objval"), tol = mytol) )
+
+    bs <- base$message$slack
+    ts <- twin$message$slack
+    cat(sprintf("  slack base = (%s)\n", paste(signif(bs, 8), collapse = ", ")))
+    cat(sprintf("  slack twin = (%s) expected (%s)\n",
+                paste(signif(ts, 8), collapse = ", "),
+                paste(signif(bs[perm], 8), collapse = ", ")))
+    check("QCQP-REORDER-MIP@03", myequal(ts, bs[perm], tol = mytol),
+          message = "MIP slacks are not reported against the original constraints")
 }
 
 test_qcqp_03 <- function(solver, control) {
@@ -525,6 +630,9 @@ if ( !any(solver %in% names(ROI_registered_solvers())) ) {
             local({test_qcqp_02(solver, control)})
             local({test_qcqp_02b(solver, control)})
             local({test_qcqp_02c(solver, control)})
+            local({test_qcqp_reorder(solver, control)})
+            local({test_qcqp_reorder_duals(solver, control)})
+            local({test_qcqp_reorder_mip(solver, control)})
             local({test_qcqp_03(solver, control)})
         }
 
@@ -566,6 +674,12 @@ if ( !any(solver %in% names(ROI_registered_solvers())) ) {
             local({test_qcqp_02b(solver, control)})
         } else if (test_name == "test_qcqp_02c") {
             local({test_qcqp_02c(solver, control)})
+        } else if (test_name == "test_qcqp_reorder") {
+            local({test_qcqp_reorder(solver, control)})
+        } else if (test_name == "test_qcqp_reorder_duals") {
+            local({test_qcqp_reorder_duals(solver, control)})
+        } else if (test_name == "test_qcqp_reorder_mip") {
+            local({test_qcqp_reorder_mip(solver, control)})
         } else if (test_name == "test_qcqp_03") {
             local({test_qcqp_03(solver, control)})
         } else if (test_name == "test_read_mps") {

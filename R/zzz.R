@@ -16,6 +16,7 @@ make_lindoapi_signatures <- function()
     ROI_plugin_register_solver_control(solver, "time_limit", "X")
     ROI_plugin_register_solver_control(solver, "method", "X")
     ROI_plugin_register_solver_control(solver, "verbose", "X")
+    ROI_plugin_register_solver_control(solver, "reorder_constraints", "X")
 
     # Register callbacks as LINDO API control parameters
     ROI_plugin_register_solver_control(solver, "on_before_optimize", "X")  # Before optimization callback

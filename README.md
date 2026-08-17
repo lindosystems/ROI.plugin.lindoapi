@@ -72,3 +72,17 @@ They can be used to adjust optimization parameters before calling ROI_solve.
 ```
 
 The set of control parameters in LINDO API is comprehensive, please refer to the official LINDO API user manual for detailed information.
+
+4. Quadratic constraints are loaded after all linear ones. LINDO API attaches quadratic terms to a constraint
+by row index, whereas ROI keeps constraints in the order they were supplied, so the two only agree when the
+Q-constraints occupy the tail of the constraint list. The plugin now reorders the constraints internally, so a
+`Q_constraint` may list them in any order. Duals and slacks are mapped back to the original ROI constraint
+order before they are returned, so `solution(opt, "msg")$pi` and `$slack` stay aligned with the constraints as
+you supplied them.
+
+Reordering is on by default. Set `control$reorder_constraints` to `FALSE` to turn it off, in which case a model
+whose L-constraints do not all precede its Q-constraints is rejected rather than reordered.
+
+```r
+		> control$reorder_constraints <- FALSE   # default is TRUE
+```

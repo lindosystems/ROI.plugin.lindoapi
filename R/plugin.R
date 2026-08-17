@@ -139,11 +139,46 @@ solve_LP <- function(x, control = list()) {
         status = sol$status, solver = "lindoapi", message = sol )
 }
 
+### Read the 'reorder_constraints' control.
+## Defaults to TRUE: a model whose Q-constraints do not already occupy the tail
+## of the constraint list is reordered internally rather than rejected.  Set it
+## to FALSE to get the strict ordering check instead.
+## @param control A list of control parameters.
+use_reorder_constraints <- function(control) {
+    value <- control$reorder_constraints
+    if ( is.null(value) || length(value) != 1L || is.na(value) ) return(TRUE)
+    isTRUE(as.logical(value))
+}
+
+### Map per-row solver output back to the ROI constraint order.
+## The model handed to LINDO orders its rows [all L-constraints] followed by
+## [all Q-constraints]; row_perm[r] is the ROI constraint that became LINDO row
+## r.  Anything indexed by row -- duals and slacks -- has to be inverted before
+## it is returned, or it is reported against the wrong constraints.  Primal
+## values and reduced costs are indexed by variable and are left alone.
+## @param sol A solution list as returned by lindoapi_solve_model.
+## @param row_perm The row permutation, or NULL if the model has no Q-constraints.
+unpermute_rows <- function(sol, row_perm) {
+    if ( is.null(row_perm) ) return(sol)
+    if ( identical(row_perm, seq_along(row_perm)) ) return(sol)
+    for ( nm in c("pi", "slack") ) {
+        v <- sol[[nm]]
+        if ( is.null(v) || length(v) != length(row_perm) ) next
+        v[row_perm] <- sol[[nm]]
+        sol[[nm]] <- v
+    }
+    return(sol)
+}
+
 ### Load QP
 ## @param rEnv LINDO enviroment object
 ## @param rModel LINDO model object
 ## @param x An object of class "OP" representing the optimization problem.
-lindoapi_load_qp <- function(x, rEnv, rModel) {
+## @param control A list of control parameters.
+## @return The last LINDO error code, carrying the LINDO-row-to-ROI-constraint
+##         permutation in its "row_perm" attribute when the model has
+##         Q-constraints.
+lindoapi_load_qp <- function(x, rEnv, rModel, control = list()) {
     # Number of columns in the constraint matrix.
     nCols <- x$n_of_variables
     # Number of rows in the constraint matrix.
@@ -161,20 +196,26 @@ lindoapi_load_qp <- function(x, rEnv, rModel) {
     ub <- bo$upper
     ## constraints
     is_qcon <- isTRUE(inherits(constraints(x), "Q_constraint", TRUE) == 1L)
+    row_perm <- NULL
     if ( is_qcon ) { # q-constraints
         QL <- terms(constraints(x))$Q
         is_lconstr <- sapply(QL, is_zero_matrix)
-        
-        ## All L-constraints must precede all Q-constraints.  rLSaddQCterms()
-        ## below addresses its target row by the ROI constraint index (i-1L),
-        ## which only coincides with the row rLSaddConstraints() appended the
-        ## constraint to when the Q-constraints occupy the tail of the list.
-        ## Anchor on the FIRST Q-constraint: any L-constraint at or after it
-        ## breaks that correspondence.  Anchoring on the LAST one instead is
+
+        ## The model handed to LINDO always ends up ordered [all L-constraints]
+        ## followed by [all Q-constraints]: rLSloadLPData() below takes the
+        ## L-rows in their original relative order, then each Q-row is appended
+        ## by rLSaddConstraints().  row_perm records which ROI constraint each
+        ## LINDO row came from, and is the identity whenever the caller had
+        ## already ordered the constraints that way.
+        row_perm <- unname(c(which(is_lconstr), which(!is_lconstr)))
+
+        ## With reordering disabled the caller is responsible for the ordering,
+        ## so check it.  Anchor on the FIRST Q-constraint: any L-constraint at
+        ## or after it breaks the requirement.  Anchoring on the LAST one is
         ## wrong twice over -- it misses an L-constraint sandwiched between two
         ## Q-constraints, and it indexes one past the end whenever the final
         ## constraint is quadratic, which is precisely the required layout.
-        if (any(!is_lconstr)) {
+        if ( !use_reorder_constraints(control) && any(!is_lconstr) ) {
             first_qconstr_idx <- min(which(!is_lconstr))
             lconstr_idx <- which(is_lconstr)
             trailing_lconstr <- lconstr_idx[lconstr_idx > first_qconstr_idx]
@@ -185,16 +226,18 @@ lindoapi_load_qp <- function(x, rEnv, rModel) {
                                 first_qconstr_idx))
                 message(sprintf("CRITICAL: L-constraint(s) at index %s follow it.",
                                 paste(trailing_lconstr, collapse = ", ")))
+                message("Set control 'reorder_constraints' to TRUE to reorder them here.")
                 message("Halting the optimization process.")
                 stop("lindoapi: L-constraints must precede all Q-constraints.")
             }
         }
-        
+
         mat <- make_csc_matrix(constraints(x)$L[is_lconstr,])
         as.matrix(constraints(x)$L[is_lconstr,])
         xsense <- map_sense(x)
         xrhs <- constraints(x)$rhs
-        nRows <- sum(is_lconstr)
+        nLinRows <- sum(is_lconstr)
+        nRows <- nLinRows
         rhs <- xrhs[is_lconstr]
         sense <- xsense[is_lconstr]
 
@@ -219,21 +262,30 @@ lindoapi_load_qp <- function(x, rEnv, rModel) {
 
     ## Q-Constraint
     if ( is_qcon ) {
-        for ( i in which(!is_lconstr) ) {
+        qconstr_idx <- which(!is_lconstr)
+        for ( k in seq_along(qconstr_idx) ) {
+            i <- qconstr_idx[k]
             QLi <- QL[[i]]
             lc <- constraints(x)$L[i,]
             paiRows <- c(0L, length(lc$j))
             nErr = rLSaddConstraints(rModel, 1L, xsense[i], NULL, paiRows, lc$v, lc$j - 1L, xrhs[i])$ErrorCode
             CHECK_ERR(rEnv, nErr, STOP=TRUE)
-            nErr = rLSaddQCterms(rModel, length(QLi$i), rep.int(i-1L,length(QLi$i)), QLi$i - 1L, QLi$j - 1L, as.numeric(QLi$v))$ErrorCode
+            ## Target the row this constraint was actually appended to.  The
+            ## model already holds nLinRows rows, so the k-th appended Q-row
+            ## sits at 0-based index nLinRows + k - 1.  Addressing it by the ROI
+            ## constraint index (i-1L) instead only agrees with that when the
+            ## Q-constraints already occupy the tail of the constraint list.
+            qrow <- nLinRows + k - 1L
+            nErr = rLSaddQCterms(rModel, length(QLi$i), rep.int(qrow,length(QLi$i)), QLi$i - 1L, QLi$j - 1L, as.numeric(QLi$v))$ErrorCode
             CHECK_ERR(rEnv, nErr, STOP=TRUE)
         }
     }
-        
+
     if ( is_mixed_intger(x) ) {
        nErr = rLSloadVarType(rModel, paste(types(x), collapse = ""))$ErrorCode
-       CHECK_ERR(rEnv, nErr, STOP = TRUE) 
+       CHECK_ERR(rEnv, nErr, STOP = TRUE)
     }
+    if ( !is.null(row_perm) ) attr(nErr, "row_perm") <- row_perm
     return (nErr)
 }
 
@@ -243,7 +295,7 @@ lindoapi_load_qp <- function(x, rEnv, rModel) {
 ## @param x An object of class "OP" representing the optimization problem.
 lindoapi_load <- function(x, rEnv, rModel, control = list()) {
     if ( any(OP_signature(x)[1:2] == "Q") ) {
-        lindoapi_load_qp(x, rEnv, rModel)
+        lindoapi_load_qp(x, rEnv, rModel, control)
     } else {
         lindoapi_load_lp(x, rEnv, rModel)
     }
@@ -258,9 +310,12 @@ solve_QP <- function(x, control = list()) {
     #Create LINDO model object
     rModel <- rLScreateModel(rEnv)
     
-    nErr <- lindoapi_load_qp(x, rEnv, rModel)
+    nErr <- lindoapi_load_qp(x, rEnv, rModel, control)
+    row_perm <- attr(nErr, "row_perm")
 
     sol <- lindoapi_solve_model(rEnv, rModel, control)
+    ## Duals and slacks come back in LINDO row order; restore ROI's.
+    sol <- unpermute_rows(sol, row_perm)
     # str(sol)
     
     #rLSwriteMPSFile(rModel, "qp.mps", 0)
