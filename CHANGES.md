@@ -2,6 +2,40 @@
 
 Newest first. Versions match `DESCRIPTION`.
 
+## 0.3-6 (2026-09-17)
+
+**The `fn_callback_log` control is now installed.**
+
+The control has been registered since 0.2-0 (`2633c1f`, 2024-11-01), but the
+only line that used it, `rLSsetModelLogfunc(rModel, fn_callback_log, new.env())`
+in `lindoapi_solve_model()`, was committed commented out. Setting the control
+on 0.3-5 was accepted and silently ignored; the LINDO log kept going to the R
+console through the printer `rLindo` installs on every model it creates.
+
+- New helper `lindoapi_set_logfunc()`, called right after `rLScreateModel()`
+  in `solve_LP()`, `solve_QP()`, `lindoapi_solve_file()`, `lindoapi_read_op()`
+  and `lindoapi_write_op()`. Installing it there rather than in
+  `lindoapi_solve_model()` is deliberate: the model statistics are printed
+  while the data is loaded, before the solve routine ever runs, and would
+  otherwise be missed.
+- A function value replaces the console printer and receives every log line
+  as `fn(sModel, sLine, sData)`. `FALSE` removes the printer and silences the
+  model. Anything else is rejected.
+- `rLindo` evaluates the callback inside its third argument, so that argument
+  must be an environment, and it keeps an unprotected pointer to it. The
+  helper returns the environment and every caller holds it in a local for
+  the life of the model, so it cannot be garbage collected under the solver.
+- `README.md` release note 5 shows the file-logging example, the `FALSE`
+  switch, and the two routes that work without this change (`sink()`, and
+  installing the function from `on_before_optimize` on 0.3-5).
+- Tests: `test_log_callback` checks the callback fires, that both load-time
+  and solve-time output reach the file and none reaches the console, and
+  that `FALSE` silences the console. Wired into the run-all block. The
+  `logFunc` example in `tests/test_cb.R` now uses `cat()` rather than
+  `print()`, so the routed log reads as the solver wrote it.
+
+`fn_callback_std` and `fn_callback_mip` are still commented out; see `TODO.md`.
+
 ## 0.3-5 (2026-08-17)
 
 **Reordering reports itself.**

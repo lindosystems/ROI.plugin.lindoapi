@@ -604,6 +604,56 @@ find_iis <- function(rModel, iis_level=1+2) {
     return(res)
 }
 
+## Log callback: control$fn_callback_log routes the LINDO log to a file.
+## Checks that the callback fires, that load-time output (model statistics)
+## and solve-time output both land in the file, and that FALSE silences the
+## console.  The LP is test_lp_01's.
+test_log_callback <- function(solver, control) {
+    mat <- matrix(c(3, 4, 2,
+                    2, 1, 2,
+                    1, 3, 2), nrow=3, byrow=TRUE)
+    x <- OP(objective = c(2, 4, 3),
+            constraints = L_constraint(L = mat,
+                                       dir = c("<=", "<=", "<="),
+                                       rhs = c(60, 40, 80)),
+            maximum = TRUE)
+
+    ## Pin the solve path: the runner flips method/use_gop for the QP block and
+    ## those settings leak into later tests.  The "Optimizing model" marker
+    ## below is printed by the simplex path, not by the barrier or GOP logs.
+    ctl <- control
+    ctl$use_gop <- FALSE
+    ctl$method <- LS_METHOD_FREE
+    logfile <- tempfile("lindo_", fileext = ".log")
+    con <- file(logfile, open = "wt")
+    n_calls <- 0L
+    ctl$fn_callback_log <- function(sModel, sLine, sData) {
+        n_calls <<- n_calls + 1L
+        cat(sLine, file = con)
+    }
+    console <- capture.output(opt <- ROI_solve(x, solver = solver, ctl))
+    close(con)
+    lines <- readLines(logfile)
+    unlink(logfile)
+
+    check("LOG-01@01", myequal(opt$objval, 230/3, tol = mytol))
+    check("LOG-01@02", n_calls > 0L, message = "log callback was never called")
+    check("LOG-01@03", length(lines) > 0L, message = "log file is empty")
+    check("LOG-01@04", any(grepl("Number of constraints", lines)),
+          message = "load-time output (model statistics) missing from the log file")
+    check("LOG-01@05", any(grepl("Optimizing model", lines)),
+          message = "solve-time output missing from the log file")
+    check("LOG-01@06", !any(grepl("Optimizing model", console)),
+          message = "solver log still reached the console")
+
+    ## FALSE removes rLindo's console printer.
+    ctl$fn_callback_log <- FALSE
+    console <- capture.output(opt <- ROI_solve(x, solver = solver, ctl))
+    check("LOG-01@07", myequal(opt$objval, 230/3, tol = mytol))
+    check("LOG-01@08", !any(grepl("Optimizing model|Number of constraints", console)),
+          message = "fn_callback_log = FALSE did not silence the solver log")
+}
+
 source("test_cb.R")
 
 solver <- "lindoapi"
@@ -669,6 +719,7 @@ if ( !any(solver %in% names(ROI_registered_solvers())) ) {
         if (2>1) {
             ##local({test_read_mps(solver, control)})
             local({test_write_mps(solver, control)})
+            local({test_log_callback(solver, control)})
         }
     } else {
         # Use the first argument as the file path

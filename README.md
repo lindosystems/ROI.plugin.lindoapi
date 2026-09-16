@@ -97,3 +97,43 @@ constraints are already in the required order is reordered by the identity and s
 		NOTE: duals and slacks are mapped back to the ROI order on return.
 		NOTE: set control 'reorder_constraints' to FALSE to reject instead.
 ```
+
+5. Redirecting the LINDO log to a file. By default the LINDO log (model statistics at load time, then the
+solver's progress and summary lines) is printed on the R console, because `rLindo` installs a console printer
+on every model it creates. The `fn_callback_log` control replaces that printer with your own function. It is
+called once per log line as `function(sModel, sLine, sData)`; `sLine` already ends with a newline, and `sData`
+is the environment the function is evaluated in. To log to a file, open a connection before the solve and
+write each line to it:
+
+```r
+		> con <- file("lindo.log", open = "wt")
+		> control$fn_callback_log <- function(sModel, sLine, sData) cat(sLine, file = con)
+		> opt <- ROI_solve(x, solver = "lindoapi", control = control)
+		> close(con)
+```
+
+The callback is installed right after the model is created, so the file receives the load-time output as
+well as the solve. Keep the function simple and let nothing inside it signal an error: it runs while the
+solver holds the call stack. To silence the log instead, set the control to `FALSE`:
+
+```r
+		> control$fn_callback_log <- FALSE   # no LINDO log at all
+```
+
+The amount of log written is governed by LINDO's own print-level parameters, which are controls too:
+`LS_IPARAM_LP_PRINTLEVEL` (default 0), `LS_IPARAM_MIP_PRINTLEVEL` (default 2) and
+`LS_IPARAM_GOP_PRINTLEVEL` (default 1).
+
+Two more routes exist that need no version-specific support. `sink()` around the solve captures the default
+console printer, together with everything else R prints, but not the license banner, which bypasses R's
+console. And on 0.3-5 and earlier, where `fn_callback_log` is accepted but never installed, the same
+function can be installed from the `on_before_optimize` hook, which receives the model object; that hook
+runs after the data is loaded, so the load-time statistics still go to the console:
+
+```r
+		> library(rLindo)
+		> control$on_before_optimize <- function(rEnv, rModel, control) {
+		+     rLSsetModelLogfunc(rModel, function(sModel, sLine, sData) cat(sLine, file = con), new.env())
+		+     invisible(NULL)
+		+ }
+```

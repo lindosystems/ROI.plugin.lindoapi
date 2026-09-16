@@ -36,6 +36,13 @@ Open work, roughly by priority. Completed items move to `CHANGES.md`.
 
 ## Features / design
 
+- **`fn_callback_std` and `fn_callback_mip` are registered but never
+  installed.** [`R/io.R`, `lindoapi_solve_model()`] Both `rLSsetCallback()`
+  and `rLSsetMIPCallback()` calls are still commented out, so the controls
+  are accepted and ignored, exactly as `fn_callback_log` was until 0.3-6.
+  Same one-line pattern as `lindoapi_set_logfunc()`, but their return-value
+  contract (a nonzero integer interrupts the solve) needs a test before they
+  are wired. `tests/test_cb.R` already carries a `cbFunc` example.
 - **Confirm the customer's 16.0 report is fully closed.** The 0.3-2 guard crash
   aborted before `rLSloadLPData()` was ever called, so it would have masked any
   genuine downstream issue. Ask for a retest on 0.3-5 before closing.
