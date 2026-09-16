@@ -9,3 +9,5 @@
 tests/test_roi_from_mps.R
 a
 b
+# Internal boards (Dropbox-linked), never shipped
+docs
