@@ -124,9 +124,8 @@ solve_LP <- function(x, control = list()) {
     rEnv <- rLScreateEnv()
     #Create LINDO model object
     rModel <- rLScreateModel(rEnv)
-    # Install the log callback before any data is loaded.  log_env must stay
-    # referenced until the model is deleted (see lindoapi_set_logfunc).
-    log_env <- lindoapi_set_logfunc(rEnv, rModel, control)
+    # Install the log callback before any data is loaded (see lindoapi_set_logfunc).
+    lindoapi_set_logfunc(rEnv, rModel, control)
 
     nErr <- lindoapi_load_lp(x, rEnv, rModel)
 
@@ -328,9 +327,8 @@ solve_QP <- function(x, control = list()) {
     rEnv <- rLScreateEnv()
     #Create LINDO model object
     rModel <- rLScreateModel(rEnv)
-    # Install the log callback before any data is loaded.  log_env must stay
-    # referenced until the model is deleted (see lindoapi_set_logfunc).
-    log_env <- lindoapi_set_logfunc(rEnv, rModel, control)
+    # Install the log callback before any data is loaded (see lindoapi_set_logfunc).
+    lindoapi_set_logfunc(rEnv, rModel, control)
     
     nErr <- lindoapi_load_qp(x, rEnv, rModel, control)
     row_perm <- attr(nErr, "row_perm")

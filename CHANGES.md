@@ -6,11 +6,12 @@ Newest first. Versions match `DESCRIPTION`.
 
 **The `fn_callback_log` control is now installed.**
 
-The control has been registered since 0.2-0 (`2633c1f`, 2024-11-01), but the
+The control has been registered since 0.2-0 (`b95d862`, 2024-11-01), but the
 only line that used it, `rLSsetModelLogfunc(rModel, fn_callback_log, new.env())`
-in `lindoapi_solve_model()`, was committed commented out. Setting the control
-on 0.3-5 was accepted and silently ignored; the LINDO log kept going to the R
-console through the printer `rLindo` installs on every model it creates.
+in `lindoapi_solve_model()` (added the same day in `2633c1f`), was committed
+commented out. Setting the control on 0.3-5 was accepted and silently ignored;
+the LINDO log kept going to the R console through the printer `rLindo`
+installs on every model it creates.
 
 - New helper `lindoapi_set_logfunc()`, called right after `rLScreateModel()`
   in `solve_LP()`, `solve_QP()`, `lindoapi_solve_file()`, `lindoapi_read_op()`
@@ -20,19 +21,28 @@ console through the printer `rLindo` installs on every model it creates.
   otherwise be missed.
 - A function value replaces the console printer and receives every log line
   as `fn(sModel, sLine, sData)`. `FALSE` removes the printer and silences the
-  model. Anything else is rejected.
-- `rLindo` evaluates the callback inside its third argument, so that argument
-  must be an environment, and it keeps an unprotected pointer to it. The
-  helper returns the environment and every caller holds it in a local for
-  the life of the model, so it cannot be garbage collected under the solver.
+  model log. `TRUE` and `NA` keep the console printer, as an unset control
+  does. Anything else is rejected. The control is read with `[[`, so a longer
+  name such as `fn_callback_logx` no longer partial-matches it.
+- `rLindo` keeps unprotected pointers to the callback and to its third
+  argument, which it uses as the environment the call is evaluated in. The
+  plugin passes `globalenv()`, which is never collected, and the function
+  stays alive through the caller's control list; an environment that nothing
+  references would be collected while the solver runs.
+- `FALSE` does not silence the license banner printed when a LINDO
+  environment is created; that comes from the library, not the model log.
+- An error signalled inside the callback unwinds through the solver and the
+  LINDO environment of that solve is not released; see `TODO.md`.
 - `README.md` release note 5 shows the file-logging example, the `FALSE`
   switch, and the two routes that work without this change (`sink()`, and
-  installing the function from `on_before_optimize` on 0.3-5).
+  installing the function from `on_before_optimize` on 0.3-5, with the
+  lifetime rule that makes that route safe).
 - Tests: `test_log_callback` checks the callback fires, that both load-time
-  and solve-time output reach the file and none reaches the console, and
-  that `FALSE` silences the console. Wired into the run-all block. The
-  `logFunc` example in `tests/test_cb.R` now uses `cat()` rather than
-  `print()`, so the routed log reads as the solver wrote it.
+  and solve-time output reach the file and none reaches the console, that
+  `FALSE` silences the console, and that `NA` and `TRUE` keep it. Wired into
+  the run-all block; the LP it uses is shared with `test_lp_01` through
+  `lp_01_op()`. The `logFunc` example in `tests/test_cb.R` now uses `cat()`
+  rather than `print()`, so the routed log reads as the solver wrote it.
 
 `fn_callback_std` and `fn_callback_mip` are still commented out; see `TODO.md`.
 

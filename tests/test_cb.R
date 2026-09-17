@@ -19,7 +19,7 @@ cbFunc <- function(sModel,iLoc,sData=NA) {
 ## @param sData The environment the callback is evaluated in (set by the plugin)
 ## @remark To send the log to a file instead, open a connection before the
 ## solve and cat(sLine, file = con) here; see README.md, release note 5.
-logFunc <- function(sModel,sLine,sData=NA) {
+logFunc <- function(sModel,sLine,sData) {
   cat(sLine)
 }
 

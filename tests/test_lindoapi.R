@@ -57,21 +57,27 @@ myequal <- function(actual, expected, tol = 1e-08, verbose = TRUE) {
 ## 2 x_1  +    x_2  +  2 x_3  <= 40
 ##   x_1  +  3 x_2  +  2 x_3  <= 80 
 ## x_1, x_2, x_3 >= 0
-test_lp_01 <- function(solver, control) {
+## The LP above as a fixture, shared with test_log_callback.
+lp_01_op <- function() {
     mat <- matrix(c(3, 4, 2,
                     2, 1, 2,
                     1, 3, 2), nrow=3, byrow=TRUE)
-    x <- OP(objective = c(2, 4, 3),
-            constraints = L_constraint(L = mat,
-                                       dir = c("<=", "<=", "<="),
-                                       rhs = c(60, 40, 80)),
-            maximum = TRUE)
+    OP(objective = c(2, 4, 3),
+       constraints = L_constraint(L = mat,
+                                  dir = c("<=", "<=", "<="),
+                                  rhs = c(60, 40, 80)),
+       maximum = TRUE)
+}
+lp_01_objval <- 230/3
+
+test_lp_01 <- function(solver, control) {
+    x <- lp_01_op()
 
     sol <- c(0, 20/3, 50/3)
-    
+
     opt <- ROI_solve(x, solver = solver, control)
     check("LP-01@01", myequal(opt$solution, sol, tol = mytol))
-    check("LP-01@02", myequal(opt$objval, 230/3, tol = mytol))
+    check("LP-01@02", myequal(opt$objval, lp_01_objval, tol = mytol))
 }
 
 ## Test if ROI can handle empty constraint matrix.
@@ -606,17 +612,10 @@ find_iis <- function(rModel, iis_level=1+2) {
 
 ## Log callback: control$fn_callback_log routes the LINDO log to a file.
 ## Checks that the callback fires, that load-time output (model statistics)
-## and solve-time output both land in the file, and that FALSE silences the
-## console.  The LP is test_lp_01's.
+## and solve-time output both land in the file, that FALSE silences the
+## console, and that NA and TRUE keep the console printer.
 test_log_callback <- function(solver, control) {
-    mat <- matrix(c(3, 4, 2,
-                    2, 1, 2,
-                    1, 3, 2), nrow=3, byrow=TRUE)
-    x <- OP(objective = c(2, 4, 3),
-            constraints = L_constraint(L = mat,
-                                       dir = c("<=", "<=", "<="),
-                                       rhs = c(60, 40, 80)),
-            maximum = TRUE)
+    x <- lp_01_op()
 
     ## Pin the solve path: the runner flips method/use_gop for the QP block and
     ## those settings leak into later tests.  The "Optimizing model" marker
@@ -626,6 +625,8 @@ test_log_callback <- function(solver, control) {
     ctl$method <- LS_METHOD_FREE
     logfile <- tempfile("lindo_", fileext = ".log")
     con <- file(logfile, open = "wt")
+    ## Release the connection and the file even if the solve errors out.
+    on.exit({ if (!is.null(con)) close(con); unlink(logfile) }, add = TRUE)
     n_calls <- 0L
     ctl$fn_callback_log <- function(sModel, sLine, sData) {
         n_calls <<- n_calls + 1L
@@ -633,10 +634,10 @@ test_log_callback <- function(solver, control) {
     }
     console <- capture.output(opt <- ROI_solve(x, solver = solver, ctl))
     close(con)
+    con <- NULL
     lines <- readLines(logfile)
-    unlink(logfile)
 
-    check("LOG-01@01", myequal(opt$objval, 230/3, tol = mytol))
+    check("LOG-01@01", myequal(opt$objval, lp_01_objval, tol = mytol))
     check("LOG-01@02", n_calls > 0L, message = "log callback was never called")
     check("LOG-01@03", length(lines) > 0L, message = "log file is empty")
     check("LOG-01@04", any(grepl("Number of constraints", lines)),
@@ -649,9 +650,19 @@ test_log_callback <- function(solver, control) {
     ## FALSE removes rLindo's console printer.
     ctl$fn_callback_log <- FALSE
     console <- capture.output(opt <- ROI_solve(x, solver = solver, ctl))
-    check("LOG-01@07", myequal(opt$objval, 230/3, tol = mytol))
+    check("LOG-01@07", myequal(opt$objval, lp_01_objval, tol = mytol))
     check("LOG-01@08", !any(grepl("Optimizing model|Number of constraints", console)),
           message = "fn_callback_log = FALSE did not silence the solver log")
+
+    ## NA and TRUE keep the console printer, like an unset control.
+    ctl$fn_callback_log <- NA
+    console <- capture.output(opt <- ROI_solve(x, solver = solver, ctl))
+    check("LOG-01@09", any(grepl("Optimizing model", console)),
+          message = "fn_callback_log = NA did not keep the console log")
+    ctl$fn_callback_log <- TRUE
+    console <- capture.output(opt <- ROI_solve(x, solver = solver, ctl))
+    check("LOG-01@10", any(grepl("Optimizing model", console)),
+          message = "fn_callback_log = TRUE did not keep the console log")
 }
 
 source("test_cb.R")

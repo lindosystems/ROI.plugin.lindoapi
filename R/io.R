@@ -16,35 +16,38 @@ library(slam)
 
 ### Route the LINDO log through the 'fn_callback_log' control.
 ## rLindo installs a console printer on every model it creates, so the LINDO
-## log is visible on the R console by default.  A function replaces that
-## printer and receives every log line as fn(sModel, sLine, sData), where
-## sLine already carries its newline; FALSE removes the printer and silences
-## the model.  Install it right after rLScreateModel() and before any data is
-## loaded, or the load-time output (model statistics) is missed.
+## log is visible on the R console by default.  The control replaces it:
+##   a function   receives every log line as fn(sModel, sLine, sData);
+##                sLine already carries its newline
+##   FALSE        removes the printer and silences the model log
+##   TRUE or NA   keep the console printer, as an unset control does
+## Install it right after rLScreateModel() and before any data is loaded, or
+## the load-time output (model statistics) is missed.
+##
+## rLindo keeps bare, unprotected pointers to the function and to the third
+## argument, which it uses as the environment the call is evaluated in.  The
+## function stays alive because the caller's control list holds it for the
+## life of the model, and the environment is globalenv(), which is never
+## collected, so nothing has to be held here.  Never pass a new.env() that
+## nothing references: it is collected underneath the solver.
 ## @param rEnv LINDO-API environment object
 ## @param rModel LINDO-API model object, freshly created
 ## @param control A list of control parameters.
-## @return The environment the callback is evaluated in, invisibly.  rLindo
-##         eval()s the callback inside its third argument and keeps a bare
-##         pointer to it, so the caller must hold the returned value for as
-##         long as the model lives, or the environment can be garbage
-##         collected underneath the solver.
 lindoapi_set_logfunc <- function(rEnv, rModel, control = list()) {
-    fn <- control$fn_callback_log
+    fn <- control[["fn_callback_log"]]      # [[ : no partial matching
     if ( is.null(fn) ) return(invisible(NULL))
-    if ( isFALSE(fn) ) {
-        nErr <- rLSsetModelLogfunc(rModel, NULL, new.env())$ErrorCode
-        CHECK_ERR(rEnv, nErr)
+    if ( is.function(fn) ) {
+        nErr <- rLSsetModelLogfunc(rModel, fn, globalenv())$ErrorCode
+    } else if ( identical(fn, FALSE) ) {
+        nErr <- rLSsetModelLogfunc(rModel, NULL, NULL)$ErrorCode
+    } else if ( isTRUE(fn) || (is.atomic(fn) && length(fn) == 1L && is.na(fn)) ) {
         return(invisible(NULL))
-    }
-    if ( !is.function(fn) ) {
+    } else {
         rLSdeleteEnv(rEnv)
-        stop("lindoapi: control 'fn_callback_log' must be a function or FALSE.")
+        stop("lindoapi: control 'fn_callback_log' must be a function, TRUE, FALSE or NA.")
     }
-    log_env <- new.env()
-    nErr <- rLSsetModelLogfunc(rModel, fn, log_env)$ErrorCode
-    CHECK_ERR(rEnv, nErr)
-    invisible(log_env)
+    CHECK_ERR(rEnv, nErr, STOP=TRUE)
+    invisible(NULL)
 }
 
 ### Solve a LINDO-API model object with specified options
@@ -69,6 +72,10 @@ lindoapi_solve_model <- function(rEnv, rModel, control = list()) {
     ## the time this function runs the model data has been loaded and its
     ## load-time output already printed.  lindoapi_set_logfunc() installs it
     ## right after rLScreateModel() in every caller that creates a model.
+    ## fn_callback_std and fn_callback_mip are not installed yet (TODO.md).
+    ## When they are, follow lindoapi_set_logfunc(): rLindo keeps unprotected
+    ## pointers to the function and to the environment argument, so pass
+    ## globalenv(), not a new.env() that nothing holds.
 
     ## Enable R-callback
     #rLSsetCallback(rModel,fn_callback_std,new.env())
@@ -284,9 +291,8 @@ lindoapi_solve_file <- function(file, control = list()) {
     rEnv <- rLScreateEnv()
     #Create LINDO model object
     rModel <- rLScreateModel(rEnv)
-    # Install the log callback before any data is loaded.  log_env must stay
-    # referenced until the model is deleted (see lindoapi_set_logfunc).
-    log_env <- lindoapi_set_logfunc(rEnv, rModel, control)
+    # Install the log callback before any data is loaded (see lindoapi_set_logfunc).
+    lindoapi_set_logfunc(rEnv, rModel, control)
 
     r <- lindoapi_read_file(rEnv, rModel, file, control)
 
@@ -592,9 +598,8 @@ lindoapi_read_op <- function(fname, control = list()) {
     rEnv <- rLScreateEnv()
     #Create LINDO model object
     rModel <- rLScreateModel(rEnv)
-    # Install the log callback before any data is loaded.  log_env must stay
-    # referenced until the model is deleted (see lindoapi_set_logfunc).
-    log_env <- lindoapi_set_logfunc(rEnv, rModel, control)
+    # Install the log callback before any data is loaded (see lindoapi_set_logfunc).
+    lindoapi_set_logfunc(rEnv, rModel, control)
 
     # Read the model from a file into LINDO-API
     r <- lindoapi_read_file(rEnv, rModel, fname, control)
@@ -619,9 +624,8 @@ lindoapi_write_op <- function(x, file, ext = "", control = list()) {
     rEnv <- rLScreateEnv()
     #Create LINDO model object
     rModel <- rLScreateModel(rEnv)
-    # Install the log callback before any data is loaded.  log_env must stay
-    # referenced until the model is deleted (see lindoapi_set_logfunc).
-    log_env <- lindoapi_set_logfunc(rEnv, rModel, control)
+    # Install the log callback before any data is loaded (see lindoapi_set_logfunc).
+    lindoapi_set_logfunc(rEnv, rModel, control)
 
     # Load the object model x to the LINDO-API
     lindoapi_load(x, rEnv, rModel, control)
