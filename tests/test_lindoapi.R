@@ -665,6 +665,31 @@ test_log_callback <- function(solver, control) {
           message = "fn_callback_log = TRUE did not keep the console log")
 }
 
+## An error raised inside fn_callback_log must not unwind through the solver:
+## the solve completes, the callback is muted from the failing line on, and
+## the plugin reports the error once, as a warning, after the solve.
+test_log_callback_error <- function(solver, control) {
+    x <- lp_01_op()
+    ctl <- control
+    ctl$use_gop <- FALSE
+    ctl$method <- LS_METHOD_FREE
+    n_calls <- 0L
+    ctl$fn_callback_log <- function(sModel, sLine, sData) {
+        n_calls <<- n_calls + 1L
+        if (n_calls == 3L) stop("boom in the log callback")
+    }
+    warns <- character()
+    opt <- withCallingHandlers(ROI_solve(x, solver = solver, ctl),
+               warning = function(w) { warns <<- c(warns, conditionMessage(w)); invokeRestart("muffleWarning") })
+    check("LOGERR-01@01", myequal(opt$objval, lp_01_objval, tol = mytol))
+    check("LOGERR-01@02", n_calls == 3L,
+          message = sprintf("callback was called %d times; expected it to be muted after the error at call 3", n_calls))
+    check("LOGERR-01@03", any(grepl("fn_callback_log", warns)) && any(grepl("boom in the log callback", warns)),
+          message = "no warning reporting the callback error")
+    check("LOGERR-01@04", sum(grepl("fn_callback_log", warns)) == 1L,
+          message = "callback error reported more than once")
+}
+
 source("test_cb.R")
 
 solver <- "lindoapi"
@@ -731,6 +756,7 @@ if ( !any(solver %in% names(ROI_registered_solvers())) ) {
             ##local({test_read_mps(solver, control)})
             local({test_write_mps(solver, control)})
             local({test_log_callback(solver, control)})
+            local({test_log_callback_error(solver, control)})
         }
     } else {
         # Use the first argument as the file path

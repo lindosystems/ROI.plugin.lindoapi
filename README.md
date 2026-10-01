@@ -113,10 +113,10 @@ open a connection before the solve and write each line to it:
 ```
 
 The callback is installed right after the model is created, so the file receives the load-time output as
-well as the solve. It runs while the solver holds the call stack, so keep it simple and let nothing inside it
-signal an error: an error there unwinds through the solver, and the LINDO environment of that solve is not
-released. Once `con` is closed the control still holds `log_to_file`, so drop the control or open a new
-connection before solving again with the same list.
+well as the solve. It runs while the solver holds the call stack, so keep it simple. Since 0.3-7 an error
+raised inside it is caught: the function is muted for the rest of that solve, the solve completes, and the
+error is reported once as a warning. Once `con` is closed the control still holds `log_to_file`, so drop the
+control or open a new connection before solving again with the same list.
 
 To silence the log instead, set the control to `FALSE`. This is also the cheapest setting for a batch run,
 because no callback fires at all:
@@ -127,7 +127,8 @@ because no callback fires at all:
 
 `FALSE` silences the model log only. The license banner printed when a LINDO environment is created comes
 from the library itself, not from the model log, and is not affected by this control, by `sink()` or by
-`capture.output()`.
+`capture.output()`. Note that `control$fn_callback_log <- NULL` removes the entry from the list, which is the
+same as never setting it: the console printer stays. `FALSE` is the value that silences it.
 
 The amount of log written is governed by LINDO's own print-level parameters, which are controls too:
 `LS_IPARAM_LP_PRINTLEVEL` (default 0), `LS_IPARAM_MIP_PRINTLEVEL` (default 2) and
@@ -152,3 +153,19 @@ after the data is loaded, so the load-time statistics still go to the console:
 
 `sink()` around the solve is a third route: it captures the default console printer, together with
 everything else R prints.
+
+6. Resources are released on every exit path. Each solve, read or write opens a LINDO environment and a model
+and, since 0.3-7, closes both from an `on.exit()` handler, so an error anywhere in between (a rejected
+control, a model that fails to load, an error inside a callback) no longer leaves a LINDO environment behind
+for the rest of the session.
+
+Known issue in LINDO API 16.0.7099: the global solver (`use_gop = TRUE`) crashes the R process on a model
+built through the API when a quadratic constraint has `==` sense or the problem is a maximization. Every
+loading call succeeds; the crash is inside `LSsolveGOP()`, and the same model read back from an MPS file
+solves. Until the library is fixed, set
+
+```r
+		> control$LS_IPARAM_GOP_QUAD_METHOD <- 0L   # default is -1
+```
+
+which selects a quadratic-handling path that is not affected. The plugin does not set this on its own.

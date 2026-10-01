@@ -2,6 +2,49 @@
 
 Newest first. Versions match `DESCRIPTION`.
 
+## 0.3-7 (2026-10-01)
+
+**LINDO environments are released on every exit path; an error in the log
+callback no longer unwinds through the solver.**
+
+Reported by a user as R hanging at garbage collection after a failed solve.
+Each entry point (`solve_LP`, `solve_QP`, `lindoapi_solve_file`,
+`lindoapi_read_op`, `lindoapi_write_op`) created a LINDO environment and
+model and deleted them on the success path only. Any error in between -- a
+rejected control, a LINDO error code, a model that fails to load, an error
+raised inside the user's `fn_callback_log` function -- left the environment
+orphaned for the rest of the session, with the model still pointing at an R
+function that garbage collection was free to reclaim.
+
+- New `lindoapi_open_model()` / `lindoapi_close_model()`: every entry point
+  opens the pair as one handle and registers the close in `on.exit()`, so
+  both are released however the function exits. `CHECK_ERR(STOP = TRUE)`,
+  the file reader and the file writer no longer delete the environment
+  themselves, which also removes the double delete those paths would
+  otherwise have caused.
+- The user's log function is wrapped. `rLindo` evaluates the callback with
+  plain `eval()`, so an error inside it used to unwind through LINDO's C
+  stack in the middle of a solve. The wrapper catches the error, mutes the
+  callback for the rest of that solve, lets the solve finish, and reports
+  the error once as a warning when the model is closed.
+- The callback is detached before the model is deleted. `rLindo` frees the
+  block it allocates for an installed callback only when the printer is
+  replaced, never on `rLSdeleteModel()`, so every solve with
+  `fn_callback_log` set used to leak one block.
+- Tests: `test_log_callback_error` runs a callback that errors on its third
+  line and checks that the solve completes with the right optimum, that the
+  callback is called exactly three times, and that exactly one warning names
+  the error. Wired into the run-all block.
+
+**Known issue in LINDO API 16.0.7099, not in the plugin.** `LSsolveGOP()`
+crashes the R process on a QCQP built through the API when a quadratic
+constraint has `==` sense or the problem is a maximization; the same model
+written to and read back from an MPS file solves. Every loading call returns
+0 and the crash is inside the global solver, so it is a library fix. Until
+then `control$LS_IPARAM_GOP_QUAD_METHOD <- 0L` avoids it (the default is
+-1). The plugin does not set this on its own. The barrier path
+(`use_gop = FALSE`) is unaffected but reports "not convex" for these models.
+
 ## 0.3-6 (2026-09-17)
 
 **The `fn_callback_log` control is now installed.**

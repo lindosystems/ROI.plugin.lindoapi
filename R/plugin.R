@@ -120,21 +120,18 @@ lindoapi_load_lp <- function(x, rEnv, rModel) {
 ## @param x An object of class "OP" representing the optimization problem.
 ## @param control A list of control parameters.
 solve_LP <- function(x, control = list()) {
-    #Create LINDO enviroment object
-    rEnv <- rLScreateEnv()
-    #Create LINDO model object
-    rModel <- rLScreateModel(rEnv)
-    # Install the log callback before any data is loaded (see lindoapi_set_logfunc).
-    lindoapi_set_logfunc(rEnv, rModel, control)
+    # Open the LINDO environment and model; both are released on every exit
+    # path by the handler below (see lindoapi_open_model).
+    h <- lindoapi_open_model(control)
+    on.exit(lindoapi_close_model(h), add = TRUE)
+    rEnv <- h$rEnv
+    rModel <- h$rModel
 
     nErr <- lindoapi_load_lp(x, rEnv, rModel)
 
     sol <- lindoapi_solve_model(rEnv, rModel, control)
     # str(sol)
 
-    rLSdeleteModel(rModel)
-    #Delete the environment
-    rLSdeleteEnv(rEnv)
     
     objval <- tryCatch(objective(x)(sol$x), error = function(e) as.numeric(NA))
     ROI_plugin_canonicalize_solution( solution = sol$x, optimum = objval,
@@ -323,12 +320,12 @@ lindoapi_load <- function(x, rEnv, rModel, control = list()) {
 ## @param x An object of class "OP" representing the optimization problem.
 ## @param control A list of control parameters.
 solve_QP <- function(x, control = list()) {
-    #Create LINDO enviroment object
-    rEnv <- rLScreateEnv()
-    #Create LINDO model object
-    rModel <- rLScreateModel(rEnv)
-    # Install the log callback before any data is loaded (see lindoapi_set_logfunc).
-    lindoapi_set_logfunc(rEnv, rModel, control)
+    # Open the LINDO environment and model; both are released on every exit
+    # path by the handler below (see lindoapi_open_model).
+    h <- lindoapi_open_model(control)
+    on.exit(lindoapi_close_model(h), add = TRUE)
+    rEnv <- h$rEnv
+    rModel <- h$rModel
     
     nErr <- lindoapi_load_qp(x, rEnv, rModel, control)
     row_perm <- attr(nErr, "row_perm")
@@ -340,9 +337,6 @@ solve_QP <- function(x, control = list()) {
     
     #rLSwriteMPSFile(rModel, "qp.mps", 0)
 
-    rLSdeleteModel(rModel)
-    #Delete the environment
-    rLSdeleteEnv(rEnv)
     
     objval <- tryCatch(objective(x)(sol$x), error = function(e) as.numeric(NA))
     ROI_plugin_canonicalize_solution( solution = sol$x, optimum = objval,
