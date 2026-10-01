@@ -57,7 +57,7 @@ myequal <- function(actual, expected, tol = 1e-08, verbose = TRUE) {
 ## 2 x_1  +    x_2  +  2 x_3  <= 40
 ##   x_1  +  3 x_2  +  2 x_3  <= 80 
 ## x_1, x_2, x_3 >= 0
-## The LP above as a fixture, shared with test_log_callback.
+## Fixture shared with the log tests.
 lp_01_op <- function() {
     mat <- matrix(c(3, 4, 2,
                     2, 1, 2,
@@ -610,22 +610,16 @@ find_iis <- function(rModel, iis_level=1+2) {
     return(res)
 }
 
-## Log callback: control$fn_callback_log routes the LINDO log to a file.
-## Checks that the callback fires, that load-time output (model statistics)
-## and solve-time output both land in the file, that FALSE silences the
-## console, and that NA and TRUE keep the console printer.
+## fn_callback_log: file gets load- and solve-time output; FALSE silences; NA/TRUE keep console.
 test_log_callback <- function(solver, control) {
     x <- lp_01_op()
 
-    ## Pin the solve path: the runner flips method/use_gop for the QP block and
-    ## those settings leak into later tests.  The "Optimizing model" marker
-    ## below is printed by the simplex path, not by the barrier or GOP logs.
+    ## Pin the path: the runner's QP settings leak in; the marker is simplex-only.
     ctl <- control
     ctl$use_gop <- FALSE
     ctl$method <- LS_METHOD_FREE
     logfile <- tempfile("lindo_", fileext = ".log")
     con <- file(logfile, open = "wt")
-    ## Release the connection and the file even if the solve errors out.
     on.exit({ if (!is.null(con)) close(con); unlink(logfile) }, add = TRUE)
     n_calls <- 0L
     ctl$fn_callback_log <- function(sModel, sLine, sData) {
@@ -665,9 +659,7 @@ test_log_callback <- function(solver, control) {
           message = "fn_callback_log = TRUE did not keep the console log")
 }
 
-## An error raised inside fn_callback_log must not unwind through the solver:
-## the solve completes, the callback is muted from the failing line on, and
-## the plugin reports the error once, as a warning, after the solve.
+## Error inside fn_callback_log: solve completes, callback muted, one warning.
 test_log_callback_error <- function(solver, control) {
     x <- lp_01_op()
     ctl <- control

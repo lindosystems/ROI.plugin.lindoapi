@@ -158,14 +158,3 @@ everything else R prints.
 and, since 0.3-7, closes both from an `on.exit()` handler, so an error anywhere in between (a rejected
 control, a model that fails to load, an error inside a callback) no longer leaves a LINDO environment behind
 for the rest of the session.
-
-Known issue in LINDO API 16.0.7099: the global solver (`use_gop = TRUE`) crashes the R process on a model
-built through the API when a quadratic constraint has `==` sense or the problem is a maximization. Every
-loading call succeeds; the crash is inside `LSsolveGOP()`, and the same model read back from an MPS file
-solves. Until the library is fixed, set
-
-```r
-		> control$LS_IPARAM_GOP_QUAD_METHOD <- 0L   # default is -1
-```
-
-which selects a quadratic-handling path that is not affected. The plugin does not set this on its own.

@@ -15,10 +15,8 @@ cbFunc <- function(sModel,iLoc,sData=NA) {
 
 ## Example of log callback
 ## @param sModel The model object
-## @param sLine The log message, newline included
-## @param sData The environment the callback is evaluated in (set by the plugin)
-## @remark To send the log to a file instead, open a connection before the
-## solve and cat(sLine, file = con) here; see README.md, release note 5.
+## @param sLine The log line, newline included
+## @param sData Evaluation environment (set by the plugin)
 logFunc <- function(sModel,sLine,sData) {
   cat(sLine)
 }

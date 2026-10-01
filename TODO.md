@@ -13,10 +13,6 @@ the package behaves is in `README.md`.
 
 ## Blocked on upstream
 
-- LINDO API 16.0.7099: `LSsolveGOP()` crashes on an API-built QCQP with an
-  `==` quadratic row or a maximization. `README.md` release note 6 carries
-  the workaround (`LS_IPARAM_GOP_QUAD_METHOD = 0`). Drop the note once a
-  fixed library ships.
 - rLindo: free the callback block in `rcLSdeleteModel()`. The plugin works
   around it by detaching the callback before deleting the model; the same
   will be needed for the standard and MIP callbacks once they are wired.

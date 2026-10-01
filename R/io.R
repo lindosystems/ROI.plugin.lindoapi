@@ -1,10 +1,7 @@
 library(rLindo)
 library(slam)
 
-### Report a LINDO error code.  STOP=TRUE raises an R error.  The LINDO
-### environment is not deleted here: the entry point that opened it releases
-### it from its on.exit() handler (see lindoapi_open_model), so nothing is
-### deleted twice and nothing is left orphaned.
+### Report a LINDO error code; STOP=TRUE raises. The caller's on.exit() releases the env.
  CHECK_ERR <- function( rEnv, err, STOP=FALSE ) {
     if ( err != 0 ) {
         if ( STOP ) {
@@ -16,20 +13,7 @@ library(slam)
     }
 }
 
-### Open a LINDO environment and model as one handle, and close both.
-## Every entry point that talks to LINDO does
-##     h <- lindoapi_open_model(control)
-##     on.exit(lindoapi_close_model(h), add = TRUE)
-## so the environment and the model are released on every path out of the
-## function, error paths included.  Before 0.3-7 each entry point deleted
-## them by hand on the success path only, and an error anywhere in between
-## (a bad control, a LINDO error code, an error raised inside the user's log
-## callback) left the LINDO environment orphaned for the rest of the session.
-## The handle is an environment so the callback wrapper and its state can
-## live on it; the caller's frame holds it until the exit handler has run.
-## @param control A list of control parameters.
-## @return An environment with fields rEnv, rModel, open, log_installed,
-##         log_wrapper, log_error and log_muted.
+### LINDO env + model as one handle; callers on.exit(lindoapi_close_model(h)).
 lindoapi_open_model <- function(control = list()) {
     h <- new.env(parent = emptyenv())
     h$open <- FALSE
@@ -39,21 +23,13 @@ lindoapi_open_model <- function(control = list()) {
     h$log_installed <- FALSE
     h$log_error <- NULL
     h$log_muted <- FALSE
-    ## Install the log callback before any data is loaded, or the load-time
-    ## output (model statistics) is missed.
+    ## Before any data is loaded, so load-time output is captured too.
     lindoapi_set_logfunc(h, control)
     h
 }
 
-### Release the handle's model and environment.  Idempotent; never signals
-### an error, so it is safe inside on.exit() while another error unwinds.
-## The log callback is detached first: rLindo frees the block it allocated
-## for the callback only when the printer is replaced, never when the model
-## is deleted, and the model must not keep a pointer into R past this point.
-## If the user's log function raised an error during the solve, it is
-## reported here as a warning; the error itself was caught inside the
-## callback so that it could not unwind through the solver.
-## @param h A handle from lindoapi_open_model.
+### Release model and env. Idempotent, never signals. Callback detached first
+### (rLindo frees its block only on replacement); a callback error is warned once.
 lindoapi_close_model <- function(h) {
     if ( !isTRUE(h$open) ) return(invisible(NULL))
     h$open <- FALSE
@@ -69,28 +45,10 @@ lindoapi_close_model <- function(h) {
     invisible(NULL)
 }
 
-### Route the LINDO log through the 'fn_callback_log' control.
-## rLindo installs a console printer on every model it creates, so the LINDO
-## log is visible on the R console by default.  The control replaces it:
-##   a function   receives every log line as fn(sModel, sLine, sData);
-##                sLine already carries its newline
-##   FALSE        removes the printer and silences the model log
-##   TRUE or NA   keep the console printer, as an unset control does
-##
-## The user's function is not handed to rLindo directly.  rLindo evaluates
-## the callback with plain eval(), so an R error inside it would unwind
-## through LINDO's C stack in the middle of a solve.  A wrapper catches the
-## error, records it on the handle, mutes the callback for the rest of the
-## solve, and lindoapi_close_model() reports it as a warning.
-##
-## rLindo keeps bare, unprotected pointers to the callback and to the third
-## argument, which it uses as the environment the call is evaluated in.  The
-## wrapper lives on the handle, which the caller's frame holds for the life
-## of the model, and the environment is globalenv(), which is never
-## collected.  Never pass a new.env() that nothing references: it is
-## collected underneath the solver.
-## @param h A handle from lindoapi_open_model, fresh, with no data loaded.
-## @param control A list of control parameters.
+### Control 'fn_callback_log': function -> replaces rLindo's console printer, called
+### as fn(sModel, sLine, sData); FALSE -> removes it; TRUE/NA -> keep it.
+### Wrapped so an error cannot unwind through LINDO. rLindo holds unprotected
+### pointers to fn and env: the wrapper lives on h, the env is globalenv().
 lindoapi_set_logfunc <- function(h, control = list()) {
     fn <- control[["fn_callback_log"]]      # [[ : no partial matching
     if ( is.null(fn) ) return(invisible(NULL))
@@ -134,14 +92,7 @@ lindoapi_solve_model <- function(rEnv, rModel, control = list()) {
     fn_callback_fox <- control$fn_callback_fox  # F(x), Function (objective and constraints)
     fn_callback_jox <- control$fn_callback_jox  # J(x), Jacobian
 
-    ## The log callback (control$fn_callback_log) is not installed here: by
-    ## the time this function runs the model data has been loaded and its
-    ## load-time output already printed.  lindoapi_open_model() installs it
-    ## right after rLScreateModel() in every entry point.
-    ## fn_callback_std and fn_callback_mip are not installed yet (TODO.md).
-    ## When they are, follow lindoapi_set_logfunc(): rLindo keeps unprotected
-    ## pointers to the function and to the environment argument, so pass
-    ## globalenv(), not a new.env() that nothing holds.
+    ## Log callback: installed by lindoapi_open_model(). std/mip callbacks: not yet.
 
     ## Enable R-callback
     #rLSsetCallback(rModel,fn_callback_std,new.env())
@@ -351,8 +302,7 @@ lindoapi_write_file <- function(x, rEnv, rModel, file, ext = "", control = list(
 lindoapi_solve_file <- function(file, control = list()) {
     solver <- "lindoapi"
    
-    # Open the LINDO environment and model; both are released on every exit
-    # path by the handler below (see lindoapi_open_model).
+    # LINDO env + model, released by on.exit() on every path.
     h <- lindoapi_open_model(control)
     on.exit(lindoapi_close_model(h), add = TRUE)
     rEnv <- h$rEnv
@@ -654,8 +604,7 @@ lindoapi_to_roi_dups <- function(rEnv, rModel, control) {
 ## @param fname character file name
 ## @remarks **Not tested**
 lindoapi_read_op <- function(fname, control = list()) {
-    # Open the LINDO environment and model; both are released on every exit
-    # path by the handler below (see lindoapi_open_model).
+    # LINDO env + model, released by on.exit() on every path.
     h <- lindoapi_open_model(control)
     on.exit(lindoapi_close_model(h), add = TRUE)
     rEnv <- h$rEnv
@@ -676,8 +625,7 @@ lindoapi_read_op <- function(fname, control = list()) {
 ## @param file character file name
 ## @param ext optional character, specifying the file format ("mps", "ltx", "mpi", "lp", or "nl").
 lindoapi_write_op <- function(x, file, ext = "", control = list()) {
-    # Open the LINDO environment and model; both are released on every exit
-    # path by the handler below (see lindoapi_open_model).
+    # LINDO env + model, released by on.exit() on every path.
     h <- lindoapi_open_model(control)
     on.exit(lindoapi_close_model(h), add = TRUE)
     rEnv <- h$rEnv

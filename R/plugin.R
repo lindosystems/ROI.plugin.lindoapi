@@ -120,8 +120,7 @@ lindoapi_load_lp <- function(x, rEnv, rModel) {
 ## @param x An object of class "OP" representing the optimization problem.
 ## @param control A list of control parameters.
 solve_LP <- function(x, control = list()) {
-    # Open the LINDO environment and model; both are released on every exit
-    # path by the handler below (see lindoapi_open_model).
+    # LINDO env + model, released by on.exit() on every path.
     h <- lindoapi_open_model(control)
     on.exit(lindoapi_close_model(h), add = TRUE)
     rEnv <- h$rEnv
@@ -320,8 +319,7 @@ lindoapi_load <- function(x, rEnv, rModel, control = list()) {
 ## @param x An object of class "OP" representing the optimization problem.
 ## @param control A list of control parameters.
 solve_QP <- function(x, control = list()) {
-    # Open the LINDO environment and model; both are released on every exit
-    # path by the handler below (see lindoapi_open_model).
+    # LINDO env + model, released by on.exit() on every path.
     h <- lindoapi_open_model(control)
     on.exit(lindoapi_close_model(h), add = TRUE)
     rEnv <- h$rEnv
