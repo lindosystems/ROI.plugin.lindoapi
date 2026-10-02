@@ -96,7 +96,8 @@ register_solver <- function(libname, pkgname, LSLOCAL = FALSE) {
     ## Only register if the solver is not already registered
     if (!solver %in% registered_solvers) {
         message("Registering solver '", solver, "'")
-        
+        show_versions()
+
         ## Register solver methods here.
         method <- if (LSLOCAL) solve_OP else getFunction("solve_OP", where = getNamespace(pkgname))
 

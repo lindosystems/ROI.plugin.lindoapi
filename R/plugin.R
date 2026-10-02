@@ -349,3 +349,12 @@ solve_OP <- function(x, control = list()) {
     }
 }
 
+show_versions <- function() {
+    cat(sprintf("R: %s\n", as.character(getRversion())))
+    cat(sprintf("ROI: %s\n", as.character(packageVersion("ROI"))))
+    cat(sprintf("ROI.plugin.lindoapi: %s\n",
+                as.character(packageVersion("ROI.plugin.lindoapi"))))
+    cat(sprintf("rLindo: %s\n", as.character(packageVersion("rLindo"))))
+    rLindo::rLSgetVersionInfo()
+    invisible(NULL)
+}
