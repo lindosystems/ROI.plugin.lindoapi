@@ -7,6 +7,7 @@
 *.ini
 
 tests/test_roi_from_mps.R
+tests/roi_test1.r
 a
 b
 # Internal boards (Dropbox-linked, top level only), never shipped
