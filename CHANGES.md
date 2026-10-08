@@ -2,6 +2,10 @@
 
 Newest first. Versions match `DESCRIPTION`.
 
+## 0.3-9 (2026-10-08)
+
+- Copyright and author header on every file in R/.
+
 ## 0.3-8 (2026-10-08)
 
 - The QP loader passes the sparse constraint matrix straight to LINDO; the dense copy is gone.

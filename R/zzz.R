@@ -1,3 +1,15 @@
+#####################################################################
+##
+##    ROI.plugin.lindoapi: LINDO API plugin for the R Optimization Infrastructure
+##    Copyright (c) 2024-2026 LINDO Systems, Inc.
+##
+##    LINDO Systems, Inc.            312.988.7422
+##    1415 North Dayton St.          info@lindo.com
+##    Chicago, IL 60622              http://www.lindo.com
+##
+##    Author: atlihan@lindo.com
+##
+#####################################################################
 make_lindoapi_signatures <- function()
     ROI_plugin_make_signature( objective = c("L", "Q"),
                                constraints = c("X", "L", "Q"),

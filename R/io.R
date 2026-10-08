@@ -1,3 +1,15 @@
+#####################################################################
+##
+##    ROI.plugin.lindoapi: LINDO API plugin for the R Optimization Infrastructure
+##    Copyright (c) 2024-2026 LINDO Systems, Inc.
+##
+##    LINDO Systems, Inc.            312.988.7422
+##    1415 North Dayton St.          info@lindo.com
+##    Chicago, IL 60622              http://www.lindo.com
+##
+##    Author: atlihan@lindo.com
+##
+#####################################################################
 library(rLindo)
 library(slam)
 

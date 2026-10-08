@@ -1,7 +1,16 @@
-## LINDO API Plugin for the R Optimization Infrastructure (ROI)
-## Author: atlihan@lindo.com
-## Date  : 2024-10-28
-## License: MIT
+#####################################################################
+##
+##    ROI.plugin.lindoapi: LINDO API plugin for the R Optimization Infrastructure
+##    Copyright (c) 2024-2026 LINDO Systems, Inc.
+##
+##    LINDO Systems, Inc.            312.988.7422
+##    1415 North Dayton St.          info@lindo.com
+##    Chicago, IL 60622              http://www.lindo.com
+##
+##    Author: atlihan@lindo.com
+##    License: MIT
+##
+#####################################################################
 as_dgCMatrix <- function( x, ... ) {
   if (is.null(x)) return(NULL)
   Matrix::sparseMatrix(i=x$i, j=x$j, x=x$v, dims=c(x$nrow, x$ncol))
