@@ -12,3 +12,4 @@ a
 b
 # Internal boards (Dropbox-linked, top level only), never shipped
 /docs
+/issues

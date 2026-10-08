@@ -247,7 +247,6 @@ lindoapi_load_qp <- function(x, rEnv, rModel, control = list()) {
         }
 
         mat <- make_csc_matrix(constraints(x)$L[is_lconstr,])
-        as.matrix(constraints(x)$L[is_lconstr,])
         xsense <- map_sense(x)
         xrhs <- constraints(x)$rhs
         nLinRows <- sum(is_lconstr)
