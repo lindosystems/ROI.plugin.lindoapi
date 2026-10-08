@@ -7,7 +7,6 @@ Newest first. Versions match `DESCRIPTION`.
 - The QP loader passes the sparse constraint matrix straight to LINDO; the dense copy is gone.
 - `test_qcqp_rowwise_scale`: a sparse QCP with 1000 linear and 5 quadratic rows, checked for feasibility and objective consistency.
 - The callback example writes its solution file to `tempdir()`.
-- Crashes while loading quadratic constraints (`rLSaddQCterms`) were a bug in the LINDO API library when its quadratic block table grows, not a problem with the model data: update to a LINDO API 16.0 build newer than 7099.173 (17.0: newer than 8099.101). Repeated or mirrored quadratic coefficients are averaged by the library as documented; no change to models is needed.
 
 ## 0.3-7 (2026-10-01)
 
