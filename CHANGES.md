@@ -5,6 +5,7 @@ Newest first. Versions match `DESCRIPTION`.
 ## 0.3-9 (2026-10-08)
 
 - Copyright and author header on every file in R/.
+- The LOCAL_OPTIMAL status message is one clause per line.
 
 ## 0.3-8 (2026-10-08)
 

@@ -52,7 +52,7 @@
     ROI_plugin_add_status_code_to_db(solver,
                               8L,
                               "LOCAL_OPTIMAL",
-                              "Satisfied optimality tolerances at a local-optimal solution, better solutions could be available. Try global optimization methods or change starting solution."
+                              "Satisfied optimality tolerances at a local-optimal solution.\nBetter solutions could be available.\nTry global optimization methods or change the starting solution."
                               )
     ROI_plugin_add_status_code_to_db(solver,
                               9L,
