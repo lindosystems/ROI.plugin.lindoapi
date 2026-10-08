@@ -2,6 +2,12 @@
 
 Newest first. Versions match `DESCRIPTION`.
 
+## 0.3-8 (2026-10-08)
+
+- The QP loader passes the sparse constraint matrix straight to LINDO; the dense copy is gone.
+- `test_qcqp_rowwise_scale`: a sparse QCP with 1000 linear and 5 quadratic rows, checked for feasibility and objective consistency.
+- The callback example writes its solution file to `tempdir()`.
+
 ## 0.3-7 (2026-10-01)
 
 **LINDO environments are released on every exit path; an error in the log

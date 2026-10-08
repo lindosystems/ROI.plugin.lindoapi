@@ -8,7 +8,7 @@
 ## 2. Added a new function 'check' to replace the 'check' function in the original code.
 ## 3. Added results from the 'on_before/after_optimize' function to local variables cbbo/cbao list
 ## 4. Added a new function 'find_iis' to find the IIS of the model.
-LSLOCAL <- FALSE
+LSLOCAL <- nzchar(Sys.getenv("LSLOCAL"))  ## LSLOCAL=1 sources ../R instead of the installed package
 Sys.setenv("ROI_LOAD_PLUGINS" = FALSE)
 library(ROI)
 if (LSLOCAL==FALSE) {
@@ -22,6 +22,7 @@ if (LSLOCAL==FALSE) {
     .onLoad(libname = NULL, pkgname = "ROI.plugin.lindoapi", LSLOCAL)
 }
 library(rLindo)
+suppressMessages(library(slam))
 mytol <- 1e-4
 
 check <- function(domain, condition, level=1, message="", call=sys.call(-1L)) {
@@ -685,6 +686,41 @@ test_log_callback_error <- function(solver, control) {
 source("test_cb.R")
 
 solver <- "lindoapi"
+## A sparse QCP of a customer's shape: 1000 linear rows loaded at once, the
+## quadratic objective, then 5 quadratic rows added one by one.  Checks that
+## the reported solution is feasible for every row and that the objective
+## value matches the objective evaluated at the solution.
+test_qcqp_rowwise_scale <- function(solver, control) {
+    set.seed(1)
+    n <- 200L; mlin <- 1000L; kq <- 5L; tq <- 10L
+    i <- as.vector(replicate(n, sample.int(mlin, 3))); j <- rep(seq_len(n), each = 3)
+    A <- simple_triplet_matrix(i = i, j = j, v = runif(3 * n), nrow = mlin, ncol = n)
+    L <- L_constraint(L = A, dir = rep("<=", mlin), rhs = rep(10, mlin))
+    Qs <- vector("list", kq); Ls <- matrix(0, kq, n); qidx <- vector("list", kq)
+    for (k in seq_len(kq)) {
+        idx <- sample.int(n, tq); Qk <- simple_triplet_zero_matrix(n, n)
+        Qk[cbind(idx, idx)] <- 1 + runif(tq); Qs[[k]] <- Qk; qidx[[k]] <- idx
+        Ls[k, sample.int(n, 2)] <- 1
+    }
+    Qc <- Q_constraint(Q = Qs, L = Ls, dir = rep("<=", kq), rhs = rep(50, kq))
+    cvec <- -(10 + runif(n))   ## strong enough that the quadratic rows bind
+    x <- OP(objective = Q_objective(Q = simple_triplet_diag_matrix(rep(2, n)), L = cvec),
+            constraints = c(L, Qc),
+            bounds = V_bound(li = seq_len(n), ui = seq_len(n), lb = rep(0, n), ub = rep(100, n)))
+    ctl <- control; ctl$use_gop <- FALSE; ctl$method <- LS_METHOD_FREE
+    opt <- ROI_solve(x, solver = solver, ctl)
+    sol <- solution(opt, force = TRUE); tol <- 1e-6   ## LOCAL_OPTIMAL is not ROI code 0
+    check("QCQP-rowwise@01", opt$status$msg$symbol %in% c("OPTIMAL", "BASIC_OPTIMAL", "LOCAL_OPTIMAL"))
+    check("QCQP-rowwise@02", all(sol >= -tol) && all(sol <= 100 + tol))
+    check("QCQP-rowwise@03", all(as.vector(as.matrix(A) %*% sol) <= 10 + tol))
+    qrow <- sapply(seq_len(kq), function(k) 0.5 * sum(Qs[[k]][cbind(qidx[[k]], qidx[[k]])] * sol[qidx[[k]]]^2) + sum(Ls[k, ] * sol))
+    check("QCQP-rowwise@04", all(qrow <= 50 + tol))
+    check("QCQP-rowwise@06", any(qrow >= 50 - 1e-3))   ## the rows take part in the optimum
+    objval <- solution(opt, "objval", force = TRUE)
+    check("QCQP-rowwise@05", myequal(objval, sum(sol^2) + sum(cvec * sol), tol = 1e-6 * (1 + abs(objval))))
+    cat("QCQP-rowwise:", opt$status$msg$symbol, "objective", format(objval, digits = 10), "\n")
+}
+
 if ( !any(solver %in% names(ROI_registered_solvers())) ) {
     ## This should never happen.
     cat(sprintf("ROI.plugin.%s is not registered.\n", solver))
@@ -742,6 +778,7 @@ if ( !any(solver %in% names(ROI_registered_solvers())) ) {
             local({test_qcqp_reorder_notice(solver, control)})
             local({test_qcqp_reorder_mip(solver, control)})
             local({test_qcqp_03(solver, control)})
+            local({test_qcqp_rowwise_scale(solver, control)})
         }
 
         if (2>1) {
