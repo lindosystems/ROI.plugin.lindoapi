@@ -174,7 +174,7 @@ on_after_optimize <- function(rEnv, rModel, control, result)
     } else if (result$status == LS_STATUS_OPTIMAL) {
         cat(">>> Model is optimal\n")
         ## e.g. write a solution file
-        solfile <- "on_after_test.sol"
+        solfile <- file.path(tempdir(), "on_after_test.sol")
         nErr = rLSwriteSolution(rModel, solfile)$ErrorCode    
         if (!is.null(control$verbose) && control$verbose) {
             if (nErr==0) {
