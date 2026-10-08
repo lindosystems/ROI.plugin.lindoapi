@@ -8,6 +8,7 @@
 ##    Chicago, IL 60622              http://www.lindo.com
 ##
 ##    Author: atlihan@lindo.com
+##    License: MIT
 ##
 #####################################################################
 make_lindoapi_signatures <- function()
